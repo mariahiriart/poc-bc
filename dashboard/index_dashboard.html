@@ -1676,7 +1676,7 @@
                                 <option value="">Todos los motivos BO</option>
                             </select>
                         </div>
-                        <table>
+                        <table id="idsTable">
                             <thead>
                                 <tr>
                                     <th onclick="sortIds('id')" class="no-sort" style="cursor:default">ID Ref.</th>
@@ -2071,14 +2071,11 @@
             if (opts.status) document.getElementById('idStatusFilter').value = opts.status;
             if (opts.ruta) document.getElementById('idRutaFilter').value = opts.ruta;
             if (opts.bo) document.getElementById('idBOFilter').value = opts.bo;
-            if (opts.hasBO) { document.getElementById('idStatusFilter').value = 'FALLIDO / INCIDENCIA'; }
+            if (opts.hasBO) { 
+                document.getElementById('idStatusFilter').value = 'FALLIDO / INCIDENCIA'; 
+            }
             if (opts.syncDash) { DRP.ids.from = DRP.dash.from; DRP.ids.to = DRP.dash.to; }
-            const desc = [];
-            if (opts.status) desc.push(opts.status === 'ÉXITO' ? 'Entregados' : 'Fallidos');
-            if (opts.conductor) desc.push('Conductor: ' + opts.conductor);
-            if (opts.ruta) desc.push(opts.ruta);
-            if (opts.bo) desc.push('BO: ' + opts.bo);
-            document.getElementById('ids-filter-desc').textContent = desc.length ? 'Filtrado: ' + desc.join(' · ') : 'Listado completo';
+            
             showPage('ids', document.getElementById('nav-ids'));
             renderIds();
         }
@@ -2089,7 +2086,6 @@
             document.getElementById('idStatusFilter').value = '';
             document.getElementById('idRutaFilter').value = '';
             document.getElementById('idBOFilter').value = '';
-            document.getElementById('ids-filter-desc').textContent = 'Listado completo';
             renderIds();
         }
 
@@ -2131,9 +2127,7 @@
             const hours = {};
             data.forEach(r => {
                 const h = r.Hora ? r.Hora.replace(/[\[\]]/g, '').split(':')[0] : null;
-                // Ignorar si no hay hora válida (ej: '—' o null)
                 if (!h || h === '—' || isNaN(parseInt(h))) return;
-                
                 if (!hours[h]) { hours[h] = { sum: 0, cnt: 0 }; }
                 hours[h].sum += (r['Tiempo de respuesta'] || 0); hours[h].cnt++;
             });
@@ -2249,12 +2243,9 @@
             ['rutaRutaFilter', 'idRutaFilter'].forEach(id => {
                 const sel = document.getElementById(id);
                 if (!sel) return;
-                // Guardar valor actual para no perderlo al repoblar
                 const currentVal = sel.value;
-                // Clear existing options except first
                 while (sel.options.length > 1) sel.remove(1);
                 rutas.forEach(r => { const o = document.createElement('option'); o.value = r; o.textContent = r; sel.appendChild(o); });
-                // Intentar restaurar valor si existe en el nuevo set
                 if (rutas.includes(currentVal)) sel.value = currentVal;
             });
             const boSel = document.getElementById('idBOFilter');
@@ -2262,18 +2253,20 @@
             while (boSel.options.length > 1) boSel.remove(1);
             bos.forEach(b => { const o = document.createElement('option'); o.value = b; o.textContent = b; boSel.appendChild(o); });
             if (bos.includes(currentBo)) boSel.value = currentBo;
-
             document.getElementById('rutasBadge').textContent = rutas.length;
         }
 
         function sortRutas(col) {
             if (rutasSort.col === col) rutasSort.dir = rutasSort.dir === 'asc' ? 'desc' : 'asc';
             else { rutasSort.col = col; rutasSort.dir = 'asc'; }
-            document.querySelectorAll('#rutasTable th').forEach(th => { th.classList.remove('sort-asc', 'sort-desc'); });
+            
+            // 🔥 Restaurar visual de flechas de ordenamiento
+            document.querySelectorAll('#rutasTable th').forEach(th => th.classList.remove('sort-asc', 'sort-desc'));
             const ths = document.querySelectorAll('#rutasTable th');
             const cols = ['ruta', 'conductor', 'fecha', 'total', 'exito', 'fallido', 'bo', 'av'];
             const idx = cols.indexOf(col);
             if (idx >= 0) ths[idx].classList.add('sort-' + rutasSort.dir);
+
             renderRutas();
         }
 
@@ -2285,7 +2278,6 @@
             data.forEach(r => {
                 const key = r['Vehículo'];
                 if (!key) return;
-                
                 if (!grouped[key]) {
                     const assigned = r.Conductor === '—' ? '' : r.Conductor;
                     grouped[key] = { fecha: r.Fecha, conductor: assigned || '—', ruta: key, total: 0, exito: 0, fallido: 0, bo: 0 };
@@ -2301,10 +2293,12 @@
                 .map(g => ({ ...g, av: pct(g.exito, g.total) }));
             rows.sort((a, b) => {
                 const dir = rutasSort.dir === 'asc' ? 1 : -1;
-                const numA = parseInt((a.ruta || '').match(/\d+/) || 0);
-                const numB = parseInt((b.ruta || '').match(/\d+/) || 0);
-                if (rutasSort.col === 'ruta') return dir * (numA - numB);
                 const col = rutasSort.col;
+                if (col === 'ruta') {
+                     const numA = parseInt((a.ruta || '').match(/\d+/) || 0);
+                     const numB = parseInt((b.ruta || '').match(/\d+/) || 0);
+                     return dir * (numA - numB);
+                }
                 if (col === 'conductor' || col === 'fecha') return dir * (a[col] < b[col] ? -1 : a[col] > b[col] ? 1 : 0);
                 return dir * (a[col] - b[col]);
             });
@@ -2339,6 +2333,15 @@
         function sortIds(col) {
             if (idsSort.col === col) idsSort.dir = idsSort.dir === 'asc' ? 'desc' : 'asc';
             else { idsSort.col = col; idsSort.dir = 'asc'; }
+            
+            document.querySelectorAll('#idsTable th').forEach(th => th.classList.remove('sort-asc', 'sort-desc'));
+            const ths = document.querySelectorAll('#idsTable th');
+            const cols = ['id', 'titulo', 'ruta', 'conductor', 'fecha', 'hora', 'resultado'];
+            const idx = cols.indexOf(col);
+            if (idx >= 0) {
+                 ths[idx].classList.add('sort-' + idsSort.dir);
+            }
+
             renderIds();
         }
 
@@ -2349,14 +2352,34 @@
             const status = document.getElementById('idStatusFilter').value || '';
             const ruta = document.getElementById('idRutaFilter').value || '';
             const bo = document.getElementById('idBOFilter').value || '';
+
+            // Labels sincrónicos
+            const desc = [];
+            if (search) desc.push(`"${search}"`);
+            if (status) desc.push(status === 'ÉXITO' ? 'Entregados' : (status==='PENDIENTE'?'Pendientes':'Fallidos'));
+            if (driver) desc.push('Conductor: ' + driver);
+            if (ruta) desc.push(ruta);
+            if (bo) desc.push('BO: ' + bo);
+            document.getElementById('ids-filter-desc').textContent = desc.length ? 'Filtrado: ' + desc.join(' · ') : 'Listado completo';
+
             let rows = data.filter(r => {
+                // Si hay búsqueda por texto, le damos prioridad (pero solo si el texto coincide con ID/Título/Folio)
+                if (search) {
+                    const matchText = String(r['Id de referencia']).includes(search) || (r.Título || '').toLowerCase().includes(search) || String(r.Folio || '').includes(search);
+                    if (!matchText) return false;
+                }
+                
+                // Filtros de select (solo aplican si el registro coincide)
                 if (status && r.Resultado !== status) return false;
                 if (ruta && r['Vehículo'] !== ruta) return false;
                 if (driver && !r.Conductor.toLowerCase().includes(driver)) return false;
-                if (bo) { const k = (r.BO || '').replace('GNV - ', '').replace('TI - ', '').replace('TI-', '').trim(); if (k !== bo) return false; }
-                if (search) return String(r['Id de referencia']).includes(search) || (r.Título || '').toLowerCase().includes(search) || String(r.Folio || '').includes(search);
+                if (bo) { 
+                    const k = (r.BO || '').replace('GNV - ', '').replace('TI - ', '').replace('TI-', '').trim(); 
+                    if (k !== bo) return false; 
+                }
                 return true;
             });
+
             rows.sort((a, b) => {
                 const dir = idsSort.dir === 'asc' ? 1 : -1;
                 const c = idsSort.col;
@@ -2374,6 +2397,12 @@
 
         function renderIdsPage(rows) {
             const start = (idsPage - 1) * IDS_PP, page = rows.slice(start, start + IDS_PP);
+            const isFiltered = !!(document.getElementById('idSearch').value || 
+                                 document.getElementById('idDriverSearch').value || 
+                                 document.getElementById('idStatusFilter').value || 
+                                 document.getElementById('idRutaFilter').value || 
+                                 document.getElementById('idBOFilter').value);
+
             document.getElementById('idsBody').innerHTML = page.map(r => {
                 const ok = r.Resultado === 'ÉXITO';
                 const tit = (r.Título || '').replace(/^\d+_/, '').substring(0, 52);
@@ -2387,7 +2416,12 @@
       <td><span class="badge ${ok ? 'badge-green' : (r.Resultado === 'PENDIENTE' ? 'badge-blue' : 'badge-red')}">${ok ? '✓ Entregado' : (r.Resultado === 'PENDIENTE' ? '○ Pendiente' : '✗ Fallido')}</span></td>
       <td><button class="btn-detail" onclick='openModal(${JSON.stringify(r).replace(/'/g, "&#39;")})'>Ver detalle</button></td>
     </tr>`;
-            }).join('') || `<tr class="empty-row"><td colspan="8">Sin registros</td></tr>`;
+            }).join('') || `<tr class="empty-row"><td colspan="8">
+                <div style="padding:40px 0; text-align:center">
+                    <div style="font-size:14px;color:var(--ct-text-2);margin-bottom:8px">No se encontraron registros coincidentes</div>
+                    ${isFiltered ? `<button class="btn-secondary btn-sm" onclick="clearIdsFilters()">Limpiar filtros y ver todos</button>` : ''}
+                </div>
+            </td></tr>`;
             renderPagination('idsPagination', rows.length, IDS_PP, idsPage, n => { idsPage = n; renderIdsPage(rows); });
         }
 
