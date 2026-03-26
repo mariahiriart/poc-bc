@@ -1,0 +1,361 @@
+"""
+procesar_whapi_json.py — Genera dashboard_YYYY_MM_DD/data.js desde JSON locales.
+
+Uso legacy: lee archivos msgs_diaNNN.json descargados previamente de Whapi.
+Para días con datos en PostgreSQL, usar procesar_whatsapp.py en su lugar.
+
+NOTA: Lógica de parseo importada de bop_parser.py (fuente única de verdad).
+"""
+import json, sys, re, os
+import openpyxl
+from datetime import datetime
+
+from bop_parser import (
+    BO_PHONES, fmt_hour,
+    extract_bop, is_bo_fmt, is_driver_msg,
+    parse_driver, parse_bo, is_exitoso,
+    get_media_for_bop,
+)
+
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
+
+def load_rutas_from_xlsx(fname): """Carga rutas y bop_to_ruta desde el xlsx de Jacob."""
+    if not os.path.exists(fname):
+        return {},
+{}
+    wb = openpyxl.load_workbook(fname)
+    ws = wb.active
+    rutas = {}
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        vehiculo = row[
+    1
+]
+        bop      = str(row[
+    5
+]).strip() if row[
+    5
+] else None
+        if not vehiculo or not bop or len(bop) != 7:
+            continue
+        ruta = vehiculo.strip()
+        rutas.setdefault(ruta,
+[])
+        if bop not in rutas[ruta
+]:
+            rutas[ruta
+].append(bop)
+    bop_to_ruta = {bop: ruta for ruta, bops in rutas.items() for bop in bops
+}
+    return rutas, bop_to_ruta
+
+
+def procesar_dia(msgs, fecha_str, rutas_csv=None, bop_to_ruta=None):
+    rutas_csv   = rutas_csv   or {}
+    bop_to_ruta = bop_to_ruta or {}
+    bop_reports  = {}
+    bo_responses = {}
+    media_by_phone = {}   # phone -> [(ts, media_item)
+]
+
+    for m in msgs:
+        phone  = m.get('from', '')
+        nombre = m.get('from_name') or phone
+        ts     = m.get('timestamp',
+0)
+        mtype  = m.get('type', '')
+
+        # Ubicación
+        if mtype == 'location':
+            loc = m.get('location',
+{})
+            lat = loc.get('latitude') or loc.get('lat')
+            lon = loc.get('longitude') or loc.get('lng')
+            if lat and lon:
+                lat, lon = float(lat), float(lon)
+                item = {
+                    'type':    'location',
+                    'preview': loc.get('preview', ''),
+                    'url':     f'https: //maps.google.com/?q={lat},{lon}',
+                    'lat':     lat, 'lon': lon,
+}
+                media_by_phone.setdefault(phone,
+[]).append((ts, item))
+            continue
+
+        # Imagen
+        if mtype == 'image':
+            img     = m.get('image') or {}
+            caption = img.get('caption', '') or ''
+            item = {
+                'type':    'image',
+                'preview': img.get('preview', ''),
+                'id':      img.get('id', ''),
+                'caption': caption,
+}
+            media_by_phone.setdefault(phone,
+[]).append((ts, item))
+            if not caption:
+                continue
+            text = caption
+        elif mtype == 'text':
+            text = (m.get('text') or {}).get('body', '')
+            if not text:
+                continue
+        else:
+            continue
+
+        hora = fmt_hour(ts)
+
+        # BO
+        if phone in BO_PHONES or is_bo_fmt(text):
+            r = parse_bo(text)
+            if r:
+                for bop in r['bops'
+]:
+                    if bop not in bo_responses:
+                        bo_responses[bop
+] = {
+                            'bo_status': r['bo_status'
+    ], 'bo_obs': r['bo_obs'
+    ],
+                            'msgs': [], 'hora': hora,
+}
+                    else:
+                        bo_responses[bop
+]['bo_status'
+] = r['bo_status'
+]
+                        bo_responses[bop
+]['bo_obs'
+]     = r['bo_obs'
+]
+                        bo_responses[bop
+]['hora'
+]        = hora
+                    bo_responses[bop
+]['msgs'
+].append(f'{hora
+} {nombre
+}: {text[
+        : 80
+    ]
+}')
+            continue
+
+        # Driver — usar is_driver_msg() que cubre BO[BP
+] y la variante Bop
+        if not is_driver_msg(text):
+            continue
+
+        r = parse_driver(text)
+        if not r:
+            continue
+
+        for bop in r['bops'
+]:
+            ruta_real = bop_to_ruta.get(bop) or r['ruta'
+] or '?'
+            if bop not in bop_reports:
+                bop_reports[bop
+] = {
+                    'phone': phone, 'nombre': nombre, 'ruta': ruta_real,
+                    'punto': r['punto'
+    ], 'status': r['status'
+    ],
+                    'obs': r['obs'
+    ], 'ts': ts, 'msgs': [], 'imgs': 0
+}
+            else:
+                bop_reports[bop
+]['status'
+] = r['status'
+]
+                bop_reports[bop
+]['obs'
+]    = r['obs'
+]
+                bop_reports[bop
+]['ts'
+]     = ts
+            bop_reports[bop
+]['msgs'
+].append(f'{hora
+} {nombre
+}: {text[
+        : 100
+    ]
+}')
+            if mtype == 'image':
+                bop_reports[bop
+]['imgs'
+] += 1
+
+    detalle  = []
+    all_bops = set()
+
+    for bop, rep in bop_reports.items():
+        bo      = bo_responses.get(bop,
+{})
+        exitoso = is_exitoso(rep['status'
+])
+        media   = get_media_for_bop(rep['phone'
+], rep['ts'
+], media_by_phone)
+        detalle.append({
+            'bop': bop, 'driver': rep['nombre'
+    ], 'ruta': rep['ruta'
+    ],
+            'status_final': 'Exito' if exitoso else 'Fallido / Incidencia',
+            'evidencias': rep['imgs'
+    ], 'media': media,
+            'driver_status': rep['status'
+    ] or 'sin estatus',
+            'driver_obs': rep['obs'
+    ],
+            'bo_status': bo.get('bo_status', 'N/A'),
+            'bo_obs': bo.get('bo_obs', ''),
+            'raw_drv_msgs': rep['msgs'
+    ],
+            'raw_bo_msgs': bo.get('msgs',
+    []),
+            'ultima_hora': fmt_hour(rep['ts'
+    ]) if rep['ts'
+    ] else '',
+})
+        all_bops.add(bop)
+
+    for bop, bo in bo_responses.items():
+        if bop in all_bops:
+            continue
+        detalle.append({
+            'bop': bop, 'driver': 'Solo BO', 'ruta': bop_to_ruta.get(bop, '?'),
+            'status_final': 'Fallido / Incidencia', 'evidencias': 0, 'media': [],
+            'driver_status': 'N/A', 'driver_obs': '',
+            'bo_status': bo.get('bo_status', 'N/A'), 'bo_obs': bo.get('bo_obs', ''),
+            'raw_drv_msgs': [], 'raw_bo_msgs': bo.get('msgs',
+    []),
+            'ultima_hora': bo.get('hora', ''),
+})
+        all_bops.add(bop)
+
+    detalle.sort(key=lambda x: (x['ruta'
+], x['bop'
+]))
+    total    = len(detalle)
+    exitosos = sum(1 for d in detalle if d['status_final'
+] == 'Exito')
+    con_bo   = sum(1 for d in detalle if d['bo_status'
+] != 'N/A')
+
+    rutas_out = []
+    for ruta, bops_asig in sorted(
+        rutas_csv.items(),
+        key=lambda x: int(x[
+    0
+].split()[
+    -1
+]) if x[
+    0
+].split()[
+    -1
+].isdigit() else 0
+    ):
+        reportados    = [b for b in bops_asig if b in all_bops
+]
+        faltantes     = [b for b in bops_asig if b not in all_bops
+]
+        driver_nombre = next((d['driver'
+] for d in detalle
+                              if d['ruta'
+] == ruta and d['driver'
+] not in ('Solo BO', '—')), '?')
+        rutas_out.append({
+            'ruta': ruta, 'driver': driver_nombre,
+            'total_asignado':  len(bops_asig),
+            'total_reportado': len(reportados),
+            'total_faltante':  len(faltantes),
+            'faltantes_bops':  faltantes
+})
+
+    output = {
+        'kpis': {
+            'total_asignados':   sum(r['total_asignado'
+        ]  for r in rutas_out) or total,
+            'total_reportados':  sum(r['total_reportado'
+        ] for r in rutas_out),
+            'total_sin_reporte': sum(r['total_faltante'
+        ]  for r in rutas_out),
+            'total_bops':  total,
+            'exitosos':    exitosos,
+            'fallidos':    total - exitosos,
+            'con_bo':      con_bo,
+            'pct_exito':   round(exitosos / total * 100,
+        1) if total else 0
+    },
+        'rutas':              rutas_out,
+        'detalle_reportados': detalle,
+        'generado_at':        datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+}
+
+    fecha_dir = fecha_str.replace('-', '_')
+    out_dir   = f'dashboard_{fecha_dir
+}'
+    os.makedirs(out_dir, exist_ok=True)
+    out_path  = os.path.join(out_dir, 'data.js')
+    with open(out_path, 'w', encoding='utf-8') as f:
+        f.write('const dashboardData = ' +
+                json.dumps(output, ensure_ascii=False, indent=2, default=str) + ';\n')
+
+    imgs_total = sum(len(d['media'
+]) for d in detalle)
+    print(f'=== {fecha_str
+} ===')
+    print(f'  BOPs driver: {len(bop_reports)
+} | BOPs BO: {len(bo_responses)
+} | Total: {total
+}')
+    print(f'  Exitosos: {exitosos
+} | Fallidos: {total-exitosos
+} | % Exito: {output[
+        "kpis"
+    ][
+        "pct_exito"
+    ]
+}%')
+    print(f'  Items multimedia asociados: {imgs_total
+}')
+    print(f'  Guardado: {out_path
+}')
+    return output
+
+
+XLSX_MAP = {
+    '2026-03-18': 'Rutas para 18 MZO Telcel.Movistar 2025 JCR.xlsx',
+    '2026-03-19': 'rutas_19_mzo.xlsx',
+    '2026-03-20': 'rutas_20_mzo.xlsx',
+    '2026-03-21': 'rutas_21_mzo.xlsx',
+    '2026-03-23': 'rutas_23_mzo.xlsx',
+}
+
+if __name__ == '__main__':
+    dias = sys.argv[
+    1:
+] if len(sys.argv) > 1 else ['2026-03-20', '2026-03-21'
+]
+    for dia in dias:
+        d = dia.split('-')[
+    2
+]
+        fname_json = f'msgs_dia{d
+}.json'
+        if not os.path.exists(fname_json):
+            print(f'No existe {fname_json
+}, saltando.')
+            continue
+        with open(fname_json, encoding='utf-8') as f:
+            msgs = json.load(f)
+        xlsx = XLSX_MAP.get(dia)
+        rutas_csv, bop_to_ruta = load_rutas_from_xlsx(xlsx) if xlsx else ({},
+{})
+        procesar_dia(msgs, dia, rutas_csv, bop_to_ruta)

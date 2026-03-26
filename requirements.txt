@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+gunicorn
+requests
+openpyxl
+python-dotenv
+psycopg2-binary
+anthropic
+pandas

@@ -1,0 +1,2616 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ConectamOS · Dashboard Operativo</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ct-teal: #2DD4BF;
+            --ct-teal-dark: #15A99A;
+            --ct-teal-light: #CCFBF1;
+            --ct-text: #111827;
+            --ct-text-2: #6B7280;
+            --ct-text-3: #9CA3AF;
+            --ct-bg: #F9FAFB;
+            --ct-surface: #FFFFFF;
+            --ct-surface-2: #F3F4F6;
+            --ct-border: #E5E7EB;
+            --ct-border-2: #D1D5DB;
+            --ct-ok: #10B981;
+            --ct-ok-bg: #D1FAE5;
+            --ct-ok-text: #065F46;
+            --ct-warn: #F59E0B;
+            --ct-warn-bg: #FEF3C7;
+            --ct-warn-text: #92400E;
+            --ct-danger: #EF4444;
+            --ct-red-bg: #FEE2E2;
+            --ct-red-text: #991B1B;
+            --ct-info: #3B82F6;
+            --ct-info-bg: #DBEAFE;
+            --ct-info-text: #1E40AF;
+            --ct-navy: #0F2937;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--ct-bg);
+            color: var(--ct-text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            font-size: 14px;
+        }
+
+        /* HEADER */
+        header {
+            height: 56px;
+            background: var(--ct-surface);
+            border-bottom: 1px solid var(--ct-border);
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            flex-shrink: 0;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--ct-text);
+            letter-spacing: -0.3px;
+        }
+
+        .brand-name span {
+            text-transform: uppercase;
+        }
+
+        .user-chip {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            border: 1px solid var(--ct-border);
+            border-radius: 8px;
+        }
+
+        .user-avatar {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #2DD4BF, #3b82f6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+            color: #0F2937;
+        }
+
+        .user-label {
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        /* LAYOUT */
+        .app-body {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 240px;
+            background: var(--ct-surface);
+            border-right: 1px solid var(--ct-border);
+            display: flex;
+            flex-direction: column;
+            transition: width .2s ease;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .sidebar.collapsed {
+            width: 60px;
+        }
+
+        .sidebar-top {
+            padding: 8px 0;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .nav-section-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--ct-text-3);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 14px 16px 4px;
+            white-space: nowrap;
+        }
+
+        .sidebar.collapsed .nav-section-label {
+            display: none;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 16px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--ct-text-2);
+            border-radius: 6px;
+            margin: 1px 8px;
+            cursor: pointer;
+            transition: all .15s;
+            white-space: nowrap;
+        }
+
+        .nav-item:hover {
+            background: var(--ct-surface-2);
+            color: var(--ct-text);
+        }
+
+        .nav-item.active {
+            background: var(--ct-teal-light);
+            color: var(--ct-teal);
+            font-weight: 600;
+        }
+
+        .nav-label {
+            opacity: 1;
+            transition: opacity .15s;
+        }
+
+        .sidebar.collapsed .nav-label {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: .7;
+            flex-shrink: 0;
+        }
+
+        .nav-icon svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 1.75;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .nav-item.active .nav-icon {
+            opacity: 1;
+        }
+
+        .nav-badge {
+            margin-left: auto;
+            background: var(--ct-teal-light);
+            color: #0F766E;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 20px;
+            white-space: nowrap;
+        }
+
+        .sidebar.collapsed .nav-badge {
+            display: none;
+        }
+
+        .collapse-btn {
+            margin: auto 8px 12px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            color: var(--ct-text-2);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            transition: background .15s;
+        }
+
+        .collapse-btn:hover {
+            background: var(--ct-surface-2);
+        }
+
+        .collapse-icon {
+            transition: transform .2s;
+            flex-shrink: 0;
+        }
+
+        .sidebar.collapsed .collapse-icon {
+            transform: rotate(180deg);
+        }
+
+        main {
+            flex: 1;
+            overflow-y: auto;
+            background: var(--ct-bg);
+        }
+
+        .content {
+            padding: 24px;
+        }
+
+        .page-header {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .page-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--ct-text);
+            margin-bottom: 3px;
+        }
+
+        .page-subtitle {
+            font-size: 14px;
+            color: var(--ct-text-2);
+        }
+
+        .topbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        /* DATE RANGE PICKER */
+        .drp-wrap {
+            position: relative;
+        }
+
+        .drp-trigger {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--ct-surface);
+            border: 1px solid var(--ct-border-2);
+            border-radius: 8px;
+            padding: 7px 14px;
+            cursor: pointer;
+            font-size: 13px;
+            font-family: 'Inter', sans-serif;
+            color: var(--ct-text);
+            transition: border-color .15s;
+            user-select: none;
+        }
+
+        .drp-trigger:hover {
+            border-color: var(--ct-teal);
+        }
+
+        .drp-trigger svg {
+            width: 14px;
+            height: 14px;
+            stroke: var(--ct-text-2);
+            fill: none;
+            stroke-width: 1.75;
+            stroke-linecap: round;
+            flex-shrink: 0;
+        }
+
+        .drp-popup {
+            position: absolute;
+            top: calc(100% + 6px);
+            right: 0;
+            background: var(--ct-surface);
+            border: 1px solid var(--ct-border);
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, .12);
+            z-index: 300;
+            padding: 16px;
+            min-width: 560px;
+            display: none;
+        }
+
+        .drp-popup.open {
+            display: flex;
+            gap: 0;
+        }
+
+        .drp-months {
+            display: flex;
+            gap: 20px;
+        }
+
+        .drp-month {
+            flex: 1;
+        }
+
+        .drp-month-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .drp-month-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--ct-text);
+        }
+
+        .drp-nav {
+            background: none;
+            border: 1px solid var(--ct-border);
+            border-radius: 6px;
+            width: 26px;
+            height: 26px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--ct-text-2);
+            transition: all .15s;
+        }
+
+        .drp-nav:hover {
+            border-color: var(--ct-teal);
+            color: var(--ct-teal);
+        }
+
+        .drp-nav svg {
+            width: 12px;
+            height: 12px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+        }
+
+        .drp-weekdays {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            margin-bottom: 4px;
+        }
+
+        .drp-wd {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--ct-text-3);
+            text-align: center;
+            padding: 3px 0;
+        }
+
+        .drp-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 1px;
+        }
+
+        .drp-day {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all .12s;
+            color: var(--ct-text);
+            margin: 0 auto;
+        }
+
+        .drp-day:hover {
+            background: var(--ct-teal-light);
+            color: var(--ct-teal);
+        }
+
+        .drp-day.other-month {
+            color: var(--ct-text-3);
+        }
+
+        .drp-day.in-range {
+            background: var(--ct-teal-light);
+            border-radius: 0;
+        }
+
+        .drp-day.range-start,
+        .drp-day.range-end {
+            background: var(--ct-teal);
+            color: #0F2937;
+            font-weight: 700;
+            border-radius: 6px;
+        }
+
+        .drp-day.range-start {
+            border-radius: 6px 0 0 6px;
+        }
+
+        .drp-day.range-end {
+            border-radius: 0 6px 6px 0;
+        }
+
+        .drp-day.range-start.range-end {
+            border-radius: 6px;
+        }
+
+        .drp-day.today {
+            font-weight: 700;
+            color: var(--ct-teal);
+        }
+
+        .drp-day.disabled {
+            color: var(--ct-text-3);
+            pointer-events: none;
+            opacity: .4;
+        }
+
+        .drp-footer {
+            padding-top: 12px;
+            margin-top: 12px;
+            border-top: 1px solid var(--ct-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .drp-selected {
+            font-size: 12px;
+            color: var(--ct-text-2);
+        }
+
+        .drp-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--ct-teal);
+            color: #0F2937;
+            font-weight: 600;
+            font-size: 13px;
+            padding: 7px 16px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: background .15s;
+        }
+
+        .btn-primary:hover {
+            background: var(--ct-teal-dark);
+        }
+
+        .btn-secondary {
+            background: var(--ct-surface);
+            color: var(--ct-text);
+            font-weight: 500;
+            font-size: 13px;
+            padding: 7px 16px;
+            border-radius: 8px;
+            border: 1px solid var(--ct-border-2);
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: background .15s;
+        }
+
+        .btn-secondary:hover {
+            background: var(--ct-surface-2);
+        }
+
+        .btn-sm {
+            font-size: 12px;
+            padding: 5px 12px;
+        }
+
+        /* KPIs */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .kpi-card {
+            background: var(--ct-surface);
+            border: 1px solid var(--ct-border);
+            border-radius: 10px;
+            padding: 16px 20px;
+            border-left: 3px solid var(--ct-border);
+            cursor: pointer;
+            transition: box-shadow .15s;
+        }
+
+        .kpi-card:hover {
+            box-shadow: 0 2px 12px rgba(0, 0, 0, .06);
+        }
+
+        .kpi-card.accent-blue {
+            border-left-color: var(--ct-info);
+        }
+
+        .kpi-card.accent-green {
+            border-left-color: var(--ct-ok);
+        }
+
+        .kpi-card.accent-red {
+            border-left-color: var(--ct-danger);
+        }
+
+        .kpi-card.accent-warn {
+            border-left-color: var(--ct-warn);
+        }
+
+        .kpi-label {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--ct-text-2);
+            margin-bottom: 8px;
+        }
+
+        .kpi-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--ct-text);
+            line-height: 1;
+        }
+
+        .kpi-sub {
+            font-size: 12px;
+            color: var(--ct-text-2);
+            margin-top: 5px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .kpi-pct {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 1px 7px;
+            border-radius: 12px;
+        }
+
+        .kpi-pct.green {
+            background: var(--ct-ok-bg);
+            color: var(--ct-ok-text);
+        }
+
+        .kpi-pct.red {
+            background: var(--ct-red-bg);
+            color: var(--ct-red-text);
+        }
+
+        .kpi-pct.warn {
+            background: var(--ct-warn-bg);
+            color: var(--ct-warn-text);
+        }
+
+        .kpi-pct.blue {
+            background: var(--ct-info-bg);
+            color: var(--ct-info-text);
+        }
+
+        .kpi-bar-track {
+            height: 3px;
+            background: var(--ct-surface-2);
+            border-radius: 3px;
+            margin-top: 10px;
+        }
+
+        .kpi-bar-fill {
+            height: 3px;
+            border-radius: 3px;
+            transition: width .6s ease;
+        }
+
+        /* CARDS / CHARTS */
+        .card {
+            background: var(--ct-surface);
+            border: 1px solid var(--ct-border);
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .card-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--ct-text);
+            margin-bottom: 3px;
+        }
+
+        .card-sub {
+            font-size: 12px;
+            color: var(--ct-text-2);
+            margin-bottom: 16px;
+        }
+
+        .charts-row {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr;
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+
+        .sankey-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+
+        /* DRIVER LIST */
+        .driver-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .driver-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
+            background: var(--ct-bg);
+            border: 1px solid var(--ct-border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: border-color .15s;
+        }
+
+        .driver-item:hover {
+            border-color: var(--ct-teal);
+        }
+
+        .driver-rank {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--ct-border-2);
+            width: 22px;
+            flex-shrink: 0;
+            text-align: center;
+        }
+
+        .driver-rank.top {
+            color: var(--ct-teal);
+        }
+
+        .d-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .driver-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .driver-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--ct-text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .driver-route {
+            font-size: 11px;
+            color: var(--ct-text-2);
+        }
+
+        .driver-stats {
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .driver-eff {
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .driver-pkgs {
+            font-size: 11px;
+            color: var(--ct-text-2);
+        }
+
+        /* TABLES */
+        .table-wrap {
+            background: var(--ct-surface);
+            border: 1px solid var(--ct-border);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .table-toolbar {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--ct-border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        thead tr {
+            background: var(--ct-surface-2);
+            border-bottom: 1px solid var(--ct-border-2);
+        }
+
+        th {
+            padding: 10px 14px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--ct-text-2);
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            white-space: nowrap;
+            cursor: pointer;
+            user-select: none;
+            transition: color .15s;
+        }
+
+        th:hover {
+            color: var(--ct-text);
+        }
+
+        th.sort-asc::after {
+            content: ' ↑';
+            color: var(--ct-teal);
+        }
+
+        th.sort-desc::after {
+            content: ' ↓';
+            color: var(--ct-teal);
+        }
+
+        th.no-sort {
+            cursor: default;
+        }
+
+        td {
+            padding: 11px 14px;
+            border-bottom: 1px solid var(--ct-border);
+            color: var(--ct-text);
+            vertical-align: middle;
+        }
+
+        tr:hover td {
+            background: #F9FAFB;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .empty-row td {
+            text-align: center;
+            color: var(--ct-text-2);
+            padding: 32px;
+        }
+
+        /* CLICKABLE STAT CELL */
+        .stat-link {
+            cursor: pointer;
+            text-decoration: none;
+            transition: color .15s;
+        }
+
+        .stat-link:hover {
+            text-decoration: underline;
+        }
+
+        .form-input {
+            padding: 7px 11px;
+            border: 1px solid var(--ct-border-2);
+            border-radius: 8px;
+            font-size: 13px;
+            font-family: 'Inter', sans-serif;
+            color: var(--ct-text);
+            background: var(--ct-surface);
+            outline: none;
+            transition: border-color .15s;
+        }
+
+        .form-input:focus {
+            border-color: var(--ct-teal);
+        }
+
+        select.form-input {
+            cursor: pointer;
+        }
+
+        /* BADGES */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 9px;
+            border-radius: 20px;
+            white-space: nowrap;
+        }
+
+        .badge-green {
+            background: var(--ct-ok-bg);
+            color: var(--ct-ok-text);
+        }
+
+        .badge-red {
+            background: var(--ct-red-bg);
+            color: var(--ct-red-text);
+        }
+
+        .badge-warn {
+            background: var(--ct-warn-bg);
+            color: var(--ct-warn-text);
+        }
+
+        .badge-blue {
+            background: var(--ct-info-bg);
+            color: var(--ct-info-text);
+        }
+
+        .badge-teal {
+            background: var(--ct-teal-light);
+            color: #0F766E;
+        }
+
+        .badge-gray {
+            background: var(--ct-surface-2);
+            color: var(--ct-text-2);
+        }
+
+        /* PROGRESS */
+        .progress-cell {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .progress-track {
+            height: 6px;
+            background: var(--ct-surface-2);
+            border-radius: 4px;
+            flex: 1;
+            min-width: 70px;
+        }
+
+        .progress-fill {
+            height: 6px;
+            border-radius: 4px;
+        }
+
+        .pct-label {
+            font-size: 12px;
+            font-weight: 600;
+            width: 36px;
+            text-align: right;
+        }
+
+        /* PAGINATION */
+        .pagination {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 12px 16px;
+            border-top: 1px solid var(--ct-border);
+        }
+
+        .page-btn {
+            background: var(--ct-surface);
+            border: 1px solid var(--ct-border-2);
+            color: var(--ct-text);
+            font-size: 12px;
+            padding: 4px 11px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all .15s;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .page-btn:hover {
+            border-color: var(--ct-teal);
+            color: var(--ct-teal);
+        }
+
+        .page-btn.active {
+            background: var(--ct-teal-light);
+            border-color: var(--ct-teal);
+            color: var(--ct-teal);
+            font-weight: 600;
+        }
+
+        .page-info {
+            font-size: 11px;
+            color: var(--ct-text-2);
+            margin-left: auto;
+        }
+
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        /* MODAL */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .35);
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .2s;
+        }
+
+        .modal-overlay.open {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .modal {
+            background: var(--ct-surface);
+            border: 1px solid var(--ct-border);
+            border-radius: 14px;
+            width: 100%;
+            max-width: 680px;
+            max-height: 88vh;
+            overflow-y: auto;
+            transform: translateY(16px);
+            transition: transform .2s;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, .14);
+        }
+
+        .modal-overlay.open .modal {
+            transform: translateY(0);
+        }
+
+        .modal-head {
+            padding: 18px 22px;
+            border-bottom: 1px solid var(--ct-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            position: sticky;
+            top: 0;
+            background: var(--ct-surface);
+            z-index: 1;
+        }
+
+        .modal-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--ct-text);
+        }
+
+        .modal-id {
+            font-size: 12px;
+            color: var(--ct-text-2);
+            margin-top: 2px;
+        }
+
+        .modal-close {
+            background: var(--ct-surface-2);
+            border: 1px solid var(--ct-border);
+            color: var(--ct-text-2);
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .modal-close:hover {
+            color: var(--ct-text);
+        }
+
+        .modal-body {
+            padding: 18px 22px;
+        }
+
+        .modal-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+
+        .info-block {
+            background: var(--ct-bg);
+            border: 1px solid var(--ct-border);
+            border-radius: 8px;
+            padding: 11px 14px;
+        }
+
+        .info-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--ct-text-2);
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            margin-bottom: 4px;
+        }
+
+        .info-value {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--ct-text);
+        }
+
+        .section-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--ct-text-2);
+            text-transform: uppercase;
+            letter-spacing: .8px;
+            margin-bottom: 10px;
+        }
+
+        .timeline {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .tl-item {
+            display: flex;
+            gap: 12px;
+        }
+
+        .tl-dot-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .tl-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            margin-top: 3px;
+        }
+
+        .tl-line {
+            width: 1px;
+            flex: 1;
+            background: var(--ct-border);
+            margin: 4px 0;
+            min-height: 18px;
+        }
+
+        .tl-content {
+            padding-bottom: 14px;
+            flex: 1;
+        }
+
+        .tl-time {
+            font-size: 11px;
+            color: var(--ct-text-2);
+        }
+
+        .tl-text {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--ct-text);
+        }
+
+        .tl-desc {
+            font-size: 11px;
+            color: var(--ct-text-2);
+            margin-top: 2px;
+        }
+
+        /* PHOTO EVIDENCE */
+        .evidence-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .ev-photo {
+            aspect-ratio: 4/3;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            cursor: pointer;
+            background: var(--ct-surface-2);
+            border: 1px solid var(--ct-border);
+        }
+
+        .ev-photo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .ev-photo-mock {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--ct-text-2);
+        }
+
+        .ev-photo-mock svg {
+            width: 22px;
+            height: 22px;
+            stroke: var(--ct-text-3);
+            fill: none;
+            stroke-width: 1.5;
+        }
+
+        .ev-photo-label {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, .55);
+            color: white;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 4px 8px;
+            text-align: center;
+        }
+
+        .ev-photo:hover .ev-photo-label {
+            background: rgba(45, 212, 191, .8);
+        }
+
+        /* PHOTO LIGHTBOX */
+        .lightbox {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .85);
+            z-index: 400;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .2s;
+        }
+
+        .lightbox.open {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .lightbox img {
+            max-width: 90vw;
+            max-height: 85vh;
+            border-radius: 8px;
+            box-shadow: 0 0 60px rgba(0, 0, 0, .5);
+        }
+
+        .lightbox-close {
+            position: absolute;
+            top: 20px;
+            right: 24px;
+            background: rgba(255, 255, 255, .15);
+            border: none;
+            color: white;
+            font-size: 20px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .lightbox-close:hover {
+            background: rgba(255, 255, 255, .25);
+        }
+
+        .map-mock {
+            background: var(--ct-bg);
+            border: 1px solid var(--ct-border);
+            border-radius: 8px;
+            height: 130px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--ct-text-2);
+            font-size: 12px;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .btn-detail {
+            background: var(--ct-surface);
+            border: 1px solid var(--ct-border-2);
+            color: var(--ct-text-2);
+            font-size: 11px;
+            padding: 5px 11px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            transition: all .15s;
+        }
+
+        .btn-detail:hover {
+            border-color: var(--ct-teal);
+            color: var(--ct-teal);
+        }
+
+        /* SANKEY TOOLTIP */
+        /* funnel styles */
+        .fn-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 5px 0;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: background .12s;
+        }
+
+        .fn-row:hover {
+            background: var(--ct-bg);
+        }
+
+        .fn-label {
+            font-size: 12px;
+            color: var(--ct-text-2);
+            flex-shrink: 0;
+            text-align: right;
+        }
+
+        .fn-label.main {
+            font-weight: 600;
+            color: var(--ct-text);
+        }
+
+        .fn-track {
+            flex: 1;
+            height: 24px;
+            background: var(--ct-surface-2);
+            border-radius: 5px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .fn-bar {
+            height: 100%;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            padding-left: 10px;
+            font-size: 11px;
+            font-weight: 700;
+            color: white;
+            white-space: nowrap;
+            transition: width .7s cubic-bezier(.4, 0, .2, 1);
+        }
+
+        .fn-meta {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            flex-shrink: 0;
+            min-width: 50px;
+        }
+
+        .fn-count {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--ct-text);
+            line-height: 1.2;
+        }
+
+        .fn-pct {
+            font-size: 10px;
+            color: var(--ct-text-2);
+        }
+
+        .fn-divider {
+            border: none;
+            border-top: 1px solid var(--ct-border);
+            margin: 8px 0 6px;
+        }
+
+        .fn-sublabel {
+            width: var(--label-w);
+            font-size: 11px;
+            color: var(--ct-text-2);
+            flex-shrink: 0;
+            text-align: right;
+            padding-right: 0;
+        }
+
+        footer {
+            background: var(--ct-navy);
+            padding: 10px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-size: 13px;
+            color: var(--ct-teal);
+            flex-shrink: 0;
+        }
+
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--ct-border-2);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div class="header-left">
+            <svg viewBox="0 0 563.08 449.75" height="28" xmlns="http://www.w3.org/2000/svg">
+                <path fill="#0F2937"
+                    d="M522.81,65.92c-13.24-4.91-23.68-15.36-28.58-28.61l-9.58-25.91-9.59,25.95c-4.89,13.22-15.3,23.65-28.52,28.55l-26.04,9.65,25.98,9.6c13.24,4.89,23.67,15.33,28.56,28.56l9.6,25.98,9.6-25.98c4.89-13.24,15.33-23.67,28.56-28.56l25.98-9.6-25.99-9.63Z" />
+                <path fill="#0F2937"
+                    d="M388.92,367.93v-103.35c0-37.49-30.67-68.16-68.16-68.16h-183.94v.05c-.53-.05-1.05-.05-1.57-.05-69.8,0-120.96,51.17-120.96,120.96s51.17,120.96,120.96,120.96c55.31,0,98.71-31.78,114.63-79.8h-52.79c-12.29,21.73-34.68,35.59-61.84,35.59-41.88,0-72.18-32.59-72.18-76.75s30.3-76.8,72.18-76.8c.52,0,1.05,0,1.57.05v-.09h189.15c10.93,0,19.78,8.86,19.78,19.78v114.13c0,35.15,28.49,63.64,63.64,63.64h74.42v-42.72h-67.45c-15.15,0-27.44-12.28-27.44-27.44Z" />
+                <path fill="#0F2937"
+                    d="M388.77,149.11v-73.56h-43.85v72.74c0,35.09,28.55,63.64,63.64,63.64h76.09v-43.04h-76.09c-10.91,0-19.78-8.87-19.78-19.78Z" />
+            </svg>
+            <span class="brand-name">Conectam<span>os</span></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+            <div
+                style="display:flex;align-items:center;gap:6px;background:var(--ct-surface);border:1px solid var(--ct-border-2);border-radius:8px;padding:6px 12px">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ct-text-2)"
+                    stroke-width="1.75" stroke-linecap="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                    <path d="M16 2v4M8 2v4M3 10h18" />
+                </svg>
+                <input type="date" id="hdrDateFrom"
+                    style="border:none;outline:none;font-size:13px;font-family:Inter,sans-serif;color:var(--ct-text);background:transparent;cursor:pointer"
+                    onchange="hdrDateChange()">
+                <input type="date" id="hdrDateTo"
+                    style="border:none;outline:none;font-size:13px;font-family:Inter,sans-serif;color:var(--ct-text);background:transparent;cursor:pointer"
+                    onchange="hdrDateChange()">
+            </div>
+            <span id="refreshIndicator"
+                style="font-size:11px;color:var(--ct-text-2);white-space:nowrap">Cargando…</span>
+        </div>
+    </header>
+
+    <div class="app-body">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-top">
+                <div class="nav-section-label">Principal</div>
+                <div class="nav-item active" onclick="showPage('dashboard',this)">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24">
+                            <rect x="3" y="3" width="7" height="7" rx="1" />
+                            <rect x="14" y="3" width="7" height="7" rx="1" />
+                            <rect x="3" y="14" width="7" height="7" rx="1" />
+                            <rect x="14" y="14" width="7" height="7" rx="1" />
+                        </svg></span>
+                    <span class="nav-label">Dashboard</span>
+                </div>
+                <div class="nav-item" onclick="showPage('rutas',this)" id="nav-rutas">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M8 12h8M12 8l4 4-4 4" />
+                        </svg></span>
+                    <span class="nav-label">Rutas</span>
+                    <span class="nav-badge" id="rutasBadge">12</span>
+                </div>
+                <div class="nav-item" onclick="showPage('ids',this)" id="nav-ids">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24">
+                            <rect x="2" y="5" width="20" height="14" rx="2" />
+                            <path d="M2 10h20M7 15h2M12 15h2" />
+                        </svg></span>
+                    <span class="nav-label">IDs / Paquetes</span>
+                </div>
+            </div>
+            <div class="collapse-btn" onclick="toggleSidebar()">
+                <span class="nav-icon collapse-icon"><svg viewBox="0 0 24 24">
+                        <polyline points="15 18 9 12 15 6" />
+                    </svg></span>
+                <span class="nav-label">Colapsar</span>
+            </div>
+        </aside>
+
+        <main>
+
+            <!-- DASHBOARD -->
+            <div id="page-dashboard" class="page active">
+                <div class="content">
+                    <div class="page-header">
+                        <div>
+                            <div class="page-title">Dashboard Operativo</div>
+                            <div class="page-subtitle" id="dash-date-label">Cargando…</div>
+                        </div>
+                        <div class="topbar-actions">
+                            <div class="drp-wrap" id="drpWrap">
+                                <div class="drp-trigger" onclick="toggleDRP()">
+                                    <svg viewBox="0 0 24 24">
+                                        <rect x="3" y="4" width="18" height="18" rx="2" />
+                                        <path d="M16 2v4M8 2v4M3 10h18" />
+                                    </svg>
+                                    <span id="drpLabel">Seleccionar período</span>
+                                </div>
+                                <div class="drp-popup" id="drpPopup">
+                                    <div>
+                                        <div class="drp-months" id="drpMonths"></div>
+                                        <div class="drp-footer">
+                                            <span class="drp-selected" id="drpSelected">Haz clic en una fecha de
+                                                inicio</span>
+                                            <div class="drp-actions">
+                                                <button class="btn-secondary btn-sm"
+                                                    onclick="clearDRP()">Limpiar</button>
+                                                <button class="btn-primary btn-sm" onclick="applyDRP()">Aplicar</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="kpi-grid">
+                        <div class="kpi-card accent-blue" onclick="goToIds({})">
+                            <div class="kpi-label">Total Paquetes</div>
+                            <div class="kpi-value" id="kpi-total">—</div>
+                            <div class="kpi-sub"><span class="kpi-pct blue">100%</span> universo del período</div>
+                            <div class="kpi-bar-track">
+                                <div class="kpi-bar-fill" style="background:var(--ct-info);width:100%"></div>
+                            </div>
+                        </div>
+                        <div class="kpi-card accent-green" onclick="goToIds({status:'ÉXITO'})">
+                            <div class="kpi-label">Entregados</div>
+                            <div class="kpi-value" id="kpi-exito">—</div>
+                            <div class="kpi-sub"><span class="kpi-pct green" id="kpi-exito-pct">—</span> tasa de éxito
+                            </div>
+                            <div class="kpi-bar-track">
+                                <div class="kpi-bar-fill" id="bar-exito" style="background:var(--ct-ok)"></div>
+                            </div>
+                        </div>
+                        <div class="kpi-card accent-red" onclick="goToIds({status:'FALLIDO / INCIDENCIA'})">
+                            <div class="kpi-label">Fallidos</div>
+                            <div class="kpi-value" id="kpi-fallido">—</div>
+                            <div class="kpi-sub"><span class="kpi-pct red" id="kpi-fallido-pct">—</span> tasa de fallo
+                            </div>
+                            <div class="kpi-bar-track">
+                                <div class="kpi-bar-fill" id="bar-fallido" style="background:var(--ct-danger)"></div>
+                            </div>
+                        </div>
+                        <div class="kpi-card accent-warn" onclick="goToIds({hasBO:true})">
+                            <div class="kpi-label">Reportados (BO)</div>
+                            <div class="kpi-value" id="kpi-reportado">—</div>
+                            <div class="kpi-sub"><span class="kpi-pct warn" id="kpi-reportado-pct">—</span> con motivo
+                                registrado</div>
+                            <div class="kpi-bar-track">
+                                <div class="kpi-bar-fill" id="bar-reportado" style="background:var(--ct-warn)"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="charts-row">
+                        <div class="card">
+                            <div class="card-title">Tiempo de Respuesta por Hora</div>
+                            <div class="card-sub">Promedio (min) según hora de operación — clic en barra para ver IDs de
+                                esa hora</div>
+                            <div style="position:relative;height:220px"><canvas id="barChart"></canvas></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-title">Motivos de Fallo</div>
+                            <div class="card-sub">Distribución por tipo BO — clic en segmento para filtrar IDs</div>
+                            <div style="position:relative;height:280px"><canvas id="pieChart"></canvas></div>
+                        </div>
+                    </div>
+
+                    <div class="sankey-row">
+                        <div class="card">
+                            <div class="card-title">Embudo de Resultados</div>
+                            <div class="card-sub">Desglose del total de paquetes por resultado y motivo de fallo · clic
+                                en fila para filtrar IDs</div>
+                            <div id="funnelContainer"></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-title">Top Drivers</div>
+                            <div class="card-sub">Por eficiencia · clic para ver sus IDs</div>
+                            <div class="driver-list" id="driverList"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RUTAS -->
+            <div id="page-rutas" class="page">
+                <div class="content">
+                    <div class="page-header">
+                        <div>
+                            <div class="page-title">Resumen por Ruta</div>
+                            <div class="page-subtitle">Clic en cualquier número para ver los IDs correspondientes</div>
+                        </div>
+                        <div class="topbar-actions">
+                            <div class="drp-wrap" id="drpWrapRutas">
+                                <div class="drp-trigger" onclick="toggleDRP('rutas')">
+                                    <svg viewBox="0 0 24 24">
+                                        <rect x="3" y="4" width="18" height="18" rx="2" />
+                                        <path d="M16 2v4M8 2v4M3 10h18" />
+                                    </svg>
+                                    <span id="drpLabelRutas">Todos los días</span>
+                                </div>
+                                <div class="drp-popup" id="drpPopupRutas"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <div class="table-toolbar">
+                            <input class="form-input" type="text" id="rutaDriverFilter" placeholder="🔍 Conductor…"
+                                oninput="renderRutas()" style="width:190px">
+                            <select class="form-input" id="rutaRutaFilter" onchange="renderRutas()">
+                                <option value="">Todas las rutas</option>
+                            </select>
+                        </div>
+                        <table id="rutasTable">
+                            <thead>
+                                <tr>
+                                    <th onclick="sortRutas('ruta')">Ruta</th>
+                                    <th onclick="sortRutas('conductor')" class="no-sort" style="cursor:default">
+                                        Conductor</th>
+                                    <th onclick="sortRutas('fecha')">Fecha</th>
+                                    <th onclick="sortRutas('total')">Asignados</th>
+                                    <th onclick="sortRutas('exito')">Entregados</th>
+                                    <th onclick="sortRutas('fallido')">Fallidos</th>
+                                    <th onclick="sortRutas('bo')">Con BO</th>
+                                    <th onclick="sortRutas('av')">Avance</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rutasBody"></tbody>
+                        </table>
+                        <div class="pagination" id="rutasPagination"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- IDs -->
+            <div id="page-ids" class="page">
+                <div class="content">
+                    <div class="page-header">
+                        <div>
+                            <div class="page-title">IDs / Paquetes</div>
+                            <div class="page-subtitle" id="ids-filter-desc">Listado completo</div>
+                        </div>
+                        <div class="topbar-actions">
+                            <div class="drp-wrap" id="drpWrapIds">
+                                <div class="drp-trigger" onclick="toggleDRP('ids')">
+                                    <svg viewBox="0 0 24 24">
+                                        <rect x="3" y="4" width="18" height="18" rx="2" />
+                                        <path d="M16 2v4M8 2v4M3 10h18" />
+                                    </svg>
+                                    <span id="drpLabelIds">Todos los días</span>
+                                </div>
+                                <div class="drp-popup" id="drpPopupIds"></div>
+                            </div>
+                            <button class="btn-secondary btn-sm" onclick="clearIdsFilters()">Limpiar filtros</button>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <div class="table-toolbar">
+                            <input class="form-input" type="text" id="idSearch" placeholder="🔍 ID, folio, título…"
+                                oninput="renderIds()" style="width:210px">
+                            <input class="form-input" type="text" id="idDriverSearch" placeholder="👤 Conductor…"
+                                oninput="renderIds()" style="width:150px">
+                            <select class="form-input" id="idStatusFilter" onchange="renderIds()">
+                                <option value="">Todos los estatus</option>
+                                <option value="ÉXITO">Entregado</option>
+                                <option value="FALLIDO / INCIDENCIA">Fallido</option>
+                            </select>
+                            <select class="form-input" id="idRutaFilter" onchange="renderIds()">
+                                <option value="">Todas las rutas</option>
+                            </select>
+                            <select class="form-input" id="idBOFilter" onchange="renderIds()">
+                                <option value="">Todos los motivos BO</option>
+                            </select>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th onclick="sortIds('id')" class="no-sort" style="cursor:default">ID Ref.</th>
+                                    <th class="no-sort" style="cursor:default">Título / Destinatario</th>
+                                    <th onclick="sortIds('ruta')">Ruta</th>
+                                    <th onclick="sortIds('conductor')" class="no-sort" style="cursor:default">Conductor
+                                    </th>
+                                    <th onclick="sortIds('fecha')">Fecha</th>
+                                    <th onclick="sortIds('hora')">Hora</th>
+                                    <th onclick="sortIds('resultado')">Estatus</th>
+                                    <th class="no-sort" style="cursor:default"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="idsBody"></tbody>
+                        </table>
+                        <div class="pagination" id="idsPagination"></div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <footer>
+        <svg viewBox="0 0 563.08 449.75" height="16" xmlns="http://www.w3.org/2000/svg">
+            <path fill="#2DD4BF"
+                d="M522.81,65.92c-13.24-4.91-23.68-15.36-28.58-28.61l-9.58-25.91-9.59,25.95c-4.89,13.22-15.3,23.65-28.52,28.55l-26.04,9.65,25.98,9.6c13.24,4.89,23.67,15.33,28.56,28.56l9.6,25.98,9.6-25.98c4.89-13.24,15.33-23.67,28.56-28.56l25.98-9.6-25.99-9.63Z" />
+            <path fill="#2DD4BF"
+                d="M388.92,367.93v-103.35c0-37.49-30.67-68.16-68.16-68.16h-183.94v.05c-.53-.05-1.05-.05-1.57-.05-69.8,0-120.96,51.17-120.96,120.96s51.17,120.96,120.96,120.96c55.31,0,98.71-31.78,114.63-79.8h-52.79c-12.29,21.73-34.68,35.59-61.84,35.59-41.88,0-72.18-32.59-72.18-76.75s30.3-76.8,72.18-76.8c.52,0,1.05,0,1.57.05v-.09h189.15c10.93,0,19.78,8.86,19.78,19.78v114.13c0,35.15,28.49,63.64,63.64,63.64h74.42v-42.72h-67.45c-15.15,0-27.44-12.28-27.44-27.44Z" />
+            <path fill="#2DD4BF"
+                d="M388.77,149.11v-73.56h-43.85v72.74c0,35.09,28.55,63.64,63.64,63.64h76.09v-43.04h-76.09c-10.91,0-19.78-8.87-19.78-19.78Z" />
+        </svg>
+        <span>Built with ❤️ Powered by 🤖</span>
+    </footer>
+
+    <!-- MODAL -->
+    <div class="modal-overlay" id="modalOverlay" onclick="closeModalOnOverlay(event)">
+        <div class="modal">
+            <div class="modal-head">
+                <div style="flex:1;min-width:0">
+                    <div class="modal-title" id="modalTitle">—</div>
+                    <div class="modal-id" id="modalSubtitle">—</div>
+                </div>
+                <button class="modal-close" onclick="closeModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-grid">
+                    <div class="info-block">
+                        <div class="info-label">Conductor</div>
+                        <div class="info-value" id="mConductor">—</div>
+                    </div>
+                    <div class="info-block">
+                        <div class="info-label">Ruta</div>
+                        <div class="info-value" id="mRuta">—</div>
+                    </div>
+                    <div class="info-block" style="grid-column:span 2">
+                        <div class="info-label">Dirección</div>
+                        <div class="info-value" id="mDireccion" style="font-size:12px">—</div>
+                    </div>
+                    <div class="info-block">
+                        <div class="info-label">Estatus</div>
+                        <div class="info-value" id="mEstatus">—</div>
+                    </div>
+                    <div class="info-block">
+                        <div class="info-label">Tiempo de respuesta</div>
+                        <div class="info-value" id="mTiempo">—</div>
+                    </div>
+                    <div class="info-block" style="grid-column:span 2">
+                        <div class="info-label">Motivo BO</div>
+                        <div class="info-value" id="mBO" style="font-size:12px">—</div>
+                    </div>
+                </div>
+                <div class="section-title">Timeline</div>
+                <div class="timeline" id="mTimeline"></div>
+                <div class="section-title" style="margin-top:18px">Ubicación</div>
+                <div class="map-mock"><svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75"
+                        viewBox="0 0 24 24">
+                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+                        <circle cx="12" cy="9" r="2.5" />
+                    </svg>Vista de mapa — conectar con Maps API</div>
+                <div class="section-title" style="margin-top:18px">Evidencias fotográficas</div>
+                <div class="evidence-grid" id="mEvidencias"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LIGHTBOX -->
+    <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+        <button class="lightbox-close">✕</button>
+        <img id="lightboxImg" src="" alt="Evidencia">
+    </div>
+
+    <script>
+        // ─── DATOS EN VIVO ────────────────────────────────────────────────────────────
+        let RAW = [];
+        let API_RUTAS = [];
+        let minDate = '', maxDate = '';
+
+        function buildEvidStr(media) {
+            if (!media || media.length === 0) return '—';
+            const photos = media.filter(m => m.type === 'image').length;
+            const videos = media.filter(m => m.type === 'video').length;
+            const locs = media.filter(m => m.type === 'location').length;
+            const parts = [];
+            if (photos > 0) parts.push(`📸 ${photos}`);
+            if (videos > 0) parts.push(`🎥 ${videos}`);
+            if (locs > 0) parts.push(`📍 ${locs}`);
+            return parts.join('  ') || '—';
+        }
+
+        function apiToRaw(apiData) {
+            const fecha = (apiData.fecha || new Date().toISOString().slice(0, 10));
+            return (apiData.detalle_reportados || []).map(d => ({
+                'Fecha': fecha,
+                'Conductor': d.driver,
+                'Vehículo': d.ruta,
+                'Parada': null,
+                'Título': d.bop + (d.driver_status ? ' — ' + d.driver_status : ''),
+                'Dirección': d.driver_obs || '—',
+                'Id de referencia': parseInt(d.bop) || d.bop,
+                'Folio': '—',
+                'Usuario': d.driver,
+                'Hora': d.ultima_hora || '—',
+                'Tiempo de respuesta': null,
+                'BO': (d.bo_status && d.bo_status !== 'N/A') ? d.bo_status : null,
+                'Resultado': d.status_final === 'Exito' ? 'ÉXITO' : (d.status_final === 'Sin Reporte' ? 'PENDIENTE' : 'FALLIDO / INCIDENCIA'),
+                'Evidencias': buildEvidStr(d.media),
+                '_media': d.media || [],
+                '_bop': d.bop,
+                '_raw_drv': d.raw_drv_msgs || [],
+                '_raw_bo': d.raw_bo_msgs || [],
+                '_driver_status': d.driver_status || '',
+                '_bo_obs': d.bo_obs || '',
+            }));
+        }
+
+        function hdrDateChange() {
+            const from = document.getElementById('hdrDateFrom').value;
+            const to = document.getElementById('hdrDateTo').value;
+            if (!from || !to) return;
+            ['dash', 'rutas', 'ids'].forEach(inst => {
+                DRP[inst].from = from;
+                DRP[inst].to = to;
+            });
+            applyFilters();
+            renderRutas();
+            renderIds();
+        }
+
+        async function cargarDatos() {
+            try {
+                document.getElementById('refreshIndicator').textContent = '↻ Actualizando…';
+                const resp = await fetch('/api/history');
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const apiData = await resp.json();
+
+                const dias = apiData.dias || [apiData];
+                RAW = dias.flatMap(d => apiToRaw(d));
+                API_RUTAS = dias.flatMap(d => d.rutas || []);
+
+                // Actualizar rango de fechas disponibles
+                const fechas = [...new Set(RAW.map(r => r.Fecha))].sort();
+                if (fechas.length > 0) {
+                    minDate = fechas[0];
+                    maxDate = fechas[fechas.length - 1];
+
+                    // Si es la primera carga o no hay fecha seleccionada, usamos solo HOY
+                    const hf = document.getElementById('hdrDateFrom');
+                    const ht = document.getElementById('hdrDateTo');
+                    
+                    if (!hf.value || !ht.value) {
+                         // Default: Solo hoy
+                         hf.value = maxDate;
+                         ht.value = maxDate;
+                         
+                         Object.keys(DRP).forEach(inst => {
+                            DRP[inst].from = maxDate;
+                            DRP[inst].to = maxDate;
+                         });
+                    } else {
+                        // Respetar lo que el usuario seleccionó
+                         Object.keys(DRP).forEach(inst => {
+                            DRP[inst].from = hf.value;
+                            DRP[inst].to = ht.value;
+                         });
+                    }
+
+                    ['dash', 'rutas', 'ids'].forEach(inst => {
+                        const labelId = inst === 'dash' ? 'drpLabel' : inst === 'rutas' ? 'drpLabelRutas' : 'drpLabelIds';
+                        const el = document.getElementById(labelId);
+                        if (el) el.textContent = fmtDate(DRP[inst].from) + ' — ' + fmtDate(DRP[inst].to);
+                    });
+                }
+
+                applyFilters();
+
+                const gen = apiData.generado_at || '';
+                document.getElementById('refreshIndicator').textContent = gen ? '✓ ' + gen : '✓ Actualizado';
+            } catch (e) {
+                console.error('[Dashboard] Error cargando datos:', e);
+                if (RAW.length === 0) {
+                    document.getElementById('refreshIndicator').textContent = '⚠ Sin conexion al servidor';
+                    document.getElementById('dash-date-label').textContent = 'Conecta el dashboard a tu servidor en /api/data';
+                } else {
+                    document.getElementById('refreshIndicator').textContent = '⚠ Sin actualizacion — usando datos previos';
+                }
+            }
+        }
+
+        // Auto-refresh cada 30 segundos
+        cargarDatos();
+        setInterval(cargarDatos, 30_000);
+
+        // ─── UTILS ───────────────────────────────────────────────────────────────────
+        const AVC = ['#2DD4BF', '#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444', '#10B981', '#F97316', '#06B6D4', '#A855F7', '#EC4899'];
+        function gc(s) { let h = 0; for (const c of s) h = (h << 5) - h + c.charCodeAt(0); return AVC[Math.abs(h) % AVC.length]; }
+        function ini(n) { return n.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase(); }
+        function pct(n, d) { return d > 0 ? Math.round(n / d * 100) : 0; }
+
+        // ─── DATE RANGE PICKER ───────────────────────────────────────────────────────
+        // State per picker instance
+        const DRP = {
+            dash: { from: '', to: '', picking: null, hoverDate: null, viewYear: null, viewMonth: null },
+            rutas: { from: '', to: '', picking: null, hoverDate: null, viewYear: null, viewMonth: null },
+            ids: { from: '', to: '', picking: null, hoverDate: null, viewYear: null, viewMonth: null },
+        };
+
+        function parseDate(s) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); }
+        function fmtDate(s) { if (!s) return '—'; const d = parseDate(s); return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }); }
+        function dateStr(y, m, d) { return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`; }
+
+        function toggleDRP(inst = 'dash') {
+            const popId = inst === 'dash' ? 'drpPopup' : inst === 'rutas' ? 'drpPopupRutas' : 'drpPopupIds';
+            const pop = document.getElementById(popId);
+            const isOpen = pop.classList.contains('open');
+            document.querySelectorAll('.drp-popup').forEach(p => p.classList.remove('open'));
+            if (!isOpen) {
+                const state = DRP[inst];
+                if (!state.viewYear) {
+                    const ref = state.from || minDate || new Date().toISOString().slice(0, 10);
+                    const d = parseDate(ref);
+                    state.viewYear = d.getFullYear(); state.viewMonth = d.getMonth();
+                }
+                if (inst === 'dash') renderDRP('dash', 'drpPopup', 'drpMonths');
+                else if (inst === 'rutas') renderDRP('rutas', 'drpPopupRutas', null);
+                else renderDRP('ids', 'drpPopupIds', null);
+                pop.classList.add('open');
+            }
+        }
+
+        function renderDRP(inst, popId, monthsContainerId) {
+            const state = DRP[inst];
+            const pop = document.getElementById(popId);
+            if (inst !== 'dash') {
+                pop.innerHTML = `<div><div class="drp-months" id="drpMonths_${inst}"></div>
+      <div class="drp-footer">
+        <span class="drp-selected" id="drpSel_${inst}">Selecciona rango</span>
+        <div class="drp-actions">
+          <button class="btn-secondary btn-sm" onclick="clearDRP('${inst}')">Limpiar</button>
+          <button class="btn-primary btn-sm" onclick="applyDRP('${inst}')">Aplicar</button>
+        </div>
+      </div></div>`;
+                monthsContainerId = `drpMonths_${inst}`;
+            }
+            const mc = document.getElementById(monthsContainerId || 'drpMonths');
+            mc.innerHTML = '';
+            for (let offset = 0; offset < 2; offset++) {
+                let y = state.viewYear, m = state.viewMonth + offset;
+                if (m > 11) { m -= 12; y++; }
+                mc.appendChild(buildMonth(inst, y, m));
+            }
+            updateDRPSelected(inst);
+        }
+
+        function buildMonth(inst, year, month) {
+            const state = DRP[inst];
+            const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+            const WDS = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+            const div = document.createElement('div');
+            div.className = 'drp-month';
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const today = new Date();
+            const todayStr = dateStr(today.getFullYear(), today.getMonth(), today.getDate());
+            let html = `<div class="drp-month-header">
+    <button class="drp-nav" onclick="drpNav('${inst}',-1)"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+    <span class="drp-month-label">${MONTHS[month]} ${year}</span>
+    <button class="drp-nav" onclick="drpNav('${inst}',1)"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>
+  </div>
+  <div class="drp-weekdays">${WDS.map(w => `<div class="drp-wd">${w}</div>`).join('')}</div>
+  <div class="drp-grid">`;
+            for (let i = 0; i < firstDay; i++) html += `<div></div>`;
+            for (let d = 1; d <= daysInMonth; d++) {
+                const ds = dateStr(year, month, d);
+                const isStart = ds === state.from;
+                const isEnd = ds === state.to;
+                const inRange = state.from && state.to && ds > state.from && ds < state.to;
+                const isToday = ds === todayStr;
+                const isPast = (minDate && ds < minDate) || (maxDate && ds > maxDate);
+                let cls = 'drp-day';
+                if (isPast) cls += ' disabled';
+                if (isToday) cls += ' today';
+                if (isStart) cls += ' range-start';
+                if (isEnd) cls += ' range-end';
+                if (inRange) cls += ' in-range';
+                html += `<div class="${cls}" onclick="drpClick('${inst}','${ds}')" onmouseenter="drpHover('${inst}','${ds}')">${d}</div>`;
+            }
+            html += '</div>';
+            div.innerHTML = html;
+            return div;
+        }
+
+        function drpNav(inst, dir) {
+            const state = DRP[inst];
+            state.viewMonth += dir;
+            if (state.viewMonth < 0) { state.viewMonth = 11; state.viewYear--; }
+            if (state.viewMonth > 11) { state.viewMonth = 0; state.viewYear++; }
+            const popId = inst === 'dash' ? 'drpPopup' : inst === 'rutas' ? 'drpPopupRutas' : 'drpPopupIds';
+            renderDRP(inst, popId, inst === 'dash' ? 'drpMonths' : null);
+        }
+
+        function drpClick(inst, ds) {
+            const state = DRP[inst];
+            if (!state.picking || state.picking === 'to') {
+                state.from = ds; state.to = null; state.picking = 'from';
+            } else {
+                if (ds < state.from) { state.to = state.from; state.from = ds; }
+                else state.to = ds;
+                state.picking = 'to';
+            }
+            const popId = inst === 'dash' ? 'drpPopup' : inst === 'rutas' ? 'drpPopupRutas' : 'drpPopupIds';
+            renderDRP(inst, popId, inst === 'dash' ? 'drpMonths' : null);
+        }
+
+        function drpHover(inst, ds) { }
+
+        function updateDRPSelected(inst) {
+            const state = DRP[inst];
+            const selId = inst === 'dash' ? 'drpSelected' : `drpSel_${inst}`;
+            const el = document.getElementById(selId);
+            if (!el) return;
+            if (state.from && state.to) el.textContent = `${fmtDate(state.from)}  →  ${fmtDate(state.to)}`;
+            else if (state.from) el.textContent = `Desde ${fmtDate(state.from)} — selecciona fecha fin`;
+            else el.textContent = 'Haz clic en una fecha de inicio';
+        }
+
+        function clearDRP(inst = 'dash') {
+            DRP[inst].from = minDate; DRP[inst].to = maxDate; DRP[inst].picking = null;
+            const popId = inst === 'dash' ? 'drpPopup' : inst === 'rutas' ? 'drpPopupRutas' : 'drpPopupIds';
+            renderDRP(inst, popId, inst === 'dash' ? 'drpMonths' : null);
+        }
+
+        function applyDRP(inst = 'dash') {
+            const state = DRP[inst];
+            if (!state.from) state.from = minDate;
+            if (!state.to) state.to = state.from;
+            document.querySelectorAll('.drp-popup').forEach(p => p.classList.remove('open'));
+            const labelId = inst === 'dash' ? 'drpLabel' : inst === 'rutas' ? 'drpLabelRutas' : 'drpLabelIds';
+            const el = document.getElementById(labelId);
+            if (el) el.textContent = state.from === state.to ? fmtDate(state.from) : `${fmtDate(state.from)} — ${fmtDate(state.to)}`;
+            if (inst === 'dash') applyFilters();
+            else if (inst === 'rutas') renderRutas();
+            else renderIds();
+        }
+
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest('.drp-wrap')) document.querySelectorAll('.drp-popup').forEach(p => p.classList.remove('open'));
+        });
+
+        function getFiltered(inst) {
+            const state = DRP[inst];
+            const from = state.from || minDate, to = state.to || maxDate;
+            if (!from || !to) return RAW;
+            return RAW.filter(r => r.Fecha >= from && r.Fecha <= to);
+        }
+
+        // ─── SIDEBAR ─────────────────────────────────────────────────────────────────
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
+
+        // ─── PAGE NAV ─────────────────────────────────────────────────────────────────
+        function showPage(id, el) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById('page-' + id).classList.add('active');
+            if (el) el.classList.add('active');
+            if (id === 'rutas') renderRutas();
+            if (id === 'ids') renderIds();
+        }
+
+        function goToIds(opts) {
+            if (opts.conductor) document.getElementById('idDriverSearch').value = opts.conductor;
+            if (opts.status) document.getElementById('idStatusFilter').value = opts.status;
+            if (opts.ruta) document.getElementById('idRutaFilter').value = opts.ruta;
+            if (opts.bo) document.getElementById('idBOFilter').value = opts.bo;
+            if (opts.hasBO) { document.getElementById('idStatusFilter').value = 'FALLIDO / INCIDENCIA'; }
+            if (opts.syncDash) { DRP.ids.from = DRP.dash.from; DRP.ids.to = DRP.dash.to; }
+            const desc = [];
+            if (opts.status) desc.push(opts.status === 'ÉXITO' ? 'Entregados' : 'Fallidos');
+            if (opts.conductor) desc.push('Conductor: ' + opts.conductor);
+            if (opts.ruta) desc.push(opts.ruta);
+            if (opts.bo) desc.push('BO: ' + opts.bo);
+            document.getElementById('ids-filter-desc').textContent = desc.length ? 'Filtrado: ' + desc.join(' · ') : 'Listado completo';
+            showPage('ids', document.getElementById('nav-ids'));
+            renderIds();
+        }
+
+        function clearIdsFilters() {
+            document.getElementById('idSearch').value = '';
+            document.getElementById('idDriverSearch').value = '';
+            document.getElementById('idStatusFilter').value = '';
+            document.getElementById('idRutaFilter').value = '';
+            document.getElementById('idBOFilter').value = '';
+            document.getElementById('ids-filter-desc').textContent = 'Listado completo';
+            renderIds();
+        }
+
+        // ─── DASHBOARD ───────────────────────────────────────────────────────────────
+        let barChartInst, pieChartInst;
+
+        function applyFilters() {
+            if (RAW.length === 0) return;
+            const data = getFiltered('dash');
+            populateSelects(data);
+            updateKPIs(data);
+            updateBarChart(data);
+            updatePieChart(data);
+            drawFunnel(data);
+            renderDriverTop(data);
+            const s = DRP.dash;
+            document.getElementById('dash-date-label').textContent =
+                s.from === s.to ? `Día: ${fmtDate(s.from)}` : `Período: ${fmtDate(s.from)} — ${fmtDate(s.to)}`;
+        }
+
+        function updateKPIs(data) {
+            const total = data.length, exito = data.filter(r => r.Resultado === 'ÉXITO').length;
+            const fallido = data.filter(r => r.Resultado === 'FALLIDO / INCIDENCIA').length;
+            const reportado = data.filter(r => r.BO && r.BO.trim()).length;
+            const pe = pct(exito, total), pf = pct(fallido, total), pr = pct(reportado, total);
+            document.getElementById('kpi-total').textContent = total;
+            document.getElementById('kpi-exito').textContent = exito;
+            document.getElementById('kpi-fallido').textContent = fallido;
+            document.getElementById('kpi-reportado').textContent = reportado;
+            document.getElementById('kpi-exito-pct').textContent = pe + '%';
+            document.getElementById('kpi-fallido-pct').textContent = pf + '%';
+            document.getElementById('kpi-reportado-pct').textContent = pr + '%';
+            document.getElementById('bar-exito').style.width = pe + '%';
+            document.getElementById('bar-fallido').style.width = pf + '%';
+            document.getElementById('bar-reportado').style.width = pr + '%';
+        }
+
+        function updateBarChart(data) {
+            const hours = {};
+            data.forEach(r => {
+                const h = r.Hora ? r.Hora.replace(/[\[\]]/g, '').split(':')[0] : null;
+                // Ignorar si no hay hora válida (ej: '—' o null)
+                if (!h || h === '—' || isNaN(parseInt(h))) return;
+                
+                if (!hours[h]) { hours[h] = { sum: 0, cnt: 0 }; }
+                hours[h].sum += (r['Tiempo de respuesta'] || 0); hours[h].cnt++;
+            });
+            const labels = Object.keys(hours).sort((a,b) => parseInt(a) - parseInt(b));
+            const values = labels.map(h => hours[h].cnt);
+            if (barChartInst) barChartInst.destroy();
+            barChartInst = new Chart(document.getElementById('barChart'), {
+                type: 'bar',
+                data: { labels: labels.map(h => h + ':00'), datasets: [{ label: 'Paquetes', data: values, backgroundColor: 'rgba(45,212,191,0.25)', borderColor: '#2DD4BF', borderWidth: 1.5, borderRadius: 5, borderSkipped: false }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y} paquetes` } } },
+                    scales: {
+                        x: { grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { color: '#6B7280', font: { size: 11, family: 'Inter' } } },
+                        y: { grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { color: '#6B7280', font: { size: 11, family: 'Inter' } }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function updatePieChart(data) {
+            const motivos = {};
+            data.filter(r => r.BO && r.BO.trim()).forEach(r => {
+                const k = r.BO.replace('GNV - ', '').replace('TI - ', '').replace('TI-', '').trim();
+                motivos[k] = (motivos[k] || 0) + 1;
+            });
+            const sorted = Object.entries(motivos).sort((a, b) => b[1] - a[1]);
+            const labels = sorted.map(e => e[0]);
+            const values = sorted.map(e => e[1]);
+            const colors = ['#EF4444', '#F59E0B', '#3B82F6', '#8B5CF6', '#10B981', '#F97316', '#EC4899', '#06B6D4', '#2DD4BF', '#A855F7'];
+            if (pieChartInst) pieChartInst.destroy();
+            pieChartInst = new Chart(document.getElementById('pieChart'), {
+                type: 'doughnut',
+                data: { labels, datasets: [{ data: values, backgroundColor: colors.slice(0, labels.length), borderColor: '#FFFFFF', borderWidth: 2 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false, cutout: '52%',
+                    onClick(e, els) { if (els.length) { const bo = labels[els[0].index]; goToIds({ bo, syncDash: true }); } },
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: '#374151', font: { size: 10, family: 'Inter' }, boxWidth: 10, padding: 8 } },
+                        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed} (${pct(ctx.parsed, values.reduce((a, b) => a + b, 0))}%)` } }
+                    }
+                }
+            });
+        }
+
+        function drawFunnel(data) {
+            const total = data.length;
+            const exito = data.filter(r => r.Resultado === 'ÉXITO').length;
+            const fallido = data.filter(r => r.Resultado === 'FALLIDO / INCIDENCIA').length;
+            const fallidoList = data.filter(r => r.Resultado === 'FALLIDO / INCIDENCIA');
+            const motivoCounts = {};
+            fallidoList.forEach(r => {
+                const k = (r.BO && r.BO.trim()) ? r.BO.replace('GNV - ', '').replace('TI - ', '').replace('TI-', '').trim() : 'Sin BO';
+                motivoCounts[k] = (motivoCounts[k] || 0) + 1;
+            });
+            const motivosSorted = Object.entries(motivoCounts).sort((a, b) => b[1] - a[1]);
+            const MC = [
+                { color: '#EF4444' }, { color: '#F97316' }, { color: '#8B5CF6' }, { color: '#F59E0B' },
+                { color: '#06B6D4' }, { color: '#6B7280' }, { color: '#EC4899' }, { color: '#14B8A6' },
+            ];
+            const LABEL_W = 130;
+            function row(label, count, refTotal, color, isMain, link) {
+                const p = refTotal > 0 ? Math.round(count / refTotal * 100) : 0;
+                const barW = Math.max(1, p);
+                return `<div class="fn-row" style="--label-w:${LABEL_W}px" onclick="goToIds(${JSON.stringify(link)})">
+      <span class="${isMain ? 'fn-label main' : 'fn-label'}" style="width:${LABEL_W}px">${label}</span>
+      <div class="fn-track"><div class="fn-bar" style="width:${barW}%;background:${color}">${count > 0 && barW > 18 ? count : ''}</div></div>
+      <div class="fn-meta"><span class="fn-count">${count}</span><span class="fn-pct">${p}%</span></div>
+    </div>`;
+            }
+            let html = '';
+            html += row('Total', total, total, '#3B82F6', true, { syncDash: true });
+            html += '<hr class="fn-divider">';
+            html += row('Entregados', exito, total, '#10B981', true, { status: 'ÉXITO', syncDash: true });
+            html += row('Fallidos', fallido, total, '#EF4444', true, { status: 'FALLIDO / INCIDENCIA', syncDash: true });
+            if (motivosSorted.length > 0) {
+                html += '<hr class="fn-divider">';
+                html += `<div style="font-size:10px;font-weight:600;color:var(--ct-text-3);text-transform:uppercase;letter-spacing:.6px;padding:0 0 4px ${LABEL_W + 10}px">Motivos de fallo</div>`;
+                motivosSorted.forEach(([lbl, cnt], i) => {
+                    html += row(lbl, cnt, fallido, MC[i % MC.length].color, false, { bo: lbl, status: 'FALLIDO / INCIDENCIA', syncDash: true });
+                });
+            }
+            document.getElementById('funnelContainer').innerHTML = html;
+        }
+
+        function renderDriverTop(data) {
+            const drivers = {};
+            data.forEach(r => {
+                if (!drivers[r.Conductor]) drivers[r.Conductor] = { total: 0, exito: 0, ruta: r['Vehículo'] };
+                drivers[r.Conductor].total++;
+                if (r.Resultado === 'ÉXITO') drivers[r.Conductor].exito++;
+            });
+            const sorted = Object.entries(drivers).map(([n, d]) => ({ name: n, ...d, eff: pct(d.exito, d.total) })).sort((a, b) => b.eff - a.eff || b.exito - a.exito);
+            document.getElementById('driverList').innerHTML = sorted.map((d, i) => `
+    <div class="driver-item" onclick="goToIds({conductor:'${d.name}',syncDash:true})">
+      <div class="driver-rank ${i < 3 ? 'top' : ''}">${i + 1}</div>
+      <div class="d-avatar" style="background:${gc(d.name)}">${ini(d.name)}</div>
+      <div class="driver-info"><div class="driver-name">${d.name}</div><div class="driver-route">${d.ruta} · ${d.total} pkgs</div></div>
+      <div class="driver-stats">
+        <div class="driver-eff" style="color:${d.eff >= 70 ? '#10B981' : d.eff >= 50 ? '#F59E0B' : '#EF4444'}">${d.eff}%</div>
+        <div class="driver-pkgs">${d.exito} entregas ↗</div>
+      </div>
+    </div>`).join('');
+        }
+
+        // ─── RUTAS ───────────────────────────────────────────────────────────────────
+        let rutasPage = 1, rutasSort = { col: 'fecha', dir: 'asc' };
+        const RUTAS_PP = 15;
+
+        function populateSelects(data = RAW) {
+            const rutas = [...new Set(data.map(r => r['Vehículo']))].sort();
+            const bos = [...new Set(data.filter(r => r.BO).map(r => r.BO.replace('GNV - ', '').replace('TI - ', '').replace('TI-', '').trim()))].sort();
+            ['rutaRutaFilter', 'idRutaFilter'].forEach(id => {
+                const sel = document.getElementById(id);
+                if (!sel) return;
+                // Guardar valor actual para no perderlo al repoblar
+                const currentVal = sel.value;
+                // Clear existing options except first
+                while (sel.options.length > 1) sel.remove(1);
+                rutas.forEach(r => { const o = document.createElement('option'); o.value = r; o.textContent = r; sel.appendChild(o); });
+                // Intentar restaurar valor si existe en el nuevo set
+                if (rutas.includes(currentVal)) sel.value = currentVal;
+            });
+            const boSel = document.getElementById('idBOFilter');
+            const currentBo = boSel.value;
+            while (boSel.options.length > 1) boSel.remove(1);
+            bos.forEach(b => { const o = document.createElement('option'); o.value = b; o.textContent = b; boSel.appendChild(o); });
+            if (bos.includes(currentBo)) boSel.value = currentBo;
+
+            document.getElementById('rutasBadge').textContent = rutas.length;
+        }
+
+        function sortRutas(col) {
+            if (rutasSort.col === col) rutasSort.dir = rutasSort.dir === 'asc' ? 'desc' : 'asc';
+            else { rutasSort.col = col; rutasSort.dir = 'asc'; }
+            document.querySelectorAll('#rutasTable th').forEach(th => { th.classList.remove('sort-asc', 'sort-desc'); });
+            const ths = document.querySelectorAll('#rutasTable th');
+            const cols = ['ruta', 'conductor', 'fecha', 'total', 'exito', 'fallido', 'bo', 'av'];
+            const idx = cols.indexOf(col);
+            if (idx >= 0) ths[idx].classList.add('sort-' + rutasSort.dir);
+            renderRutas();
+        }
+
+        function getRutasData() {
+            const data = getFiltered('rutas');
+            const dq = (document.getElementById('rutaDriverFilter').value || '').toLowerCase();
+            const rq = document.getElementById('rutaRutaFilter').value || '';
+            const grouped = {};
+            data.forEach(r => {
+                const key = r['Vehículo'];
+                if (!key) return;
+                
+                if (!grouped[key]) {
+                    const assigned = r.Conductor === '—' ? '' : r.Conductor;
+                    grouped[key] = { fecha: r.Fecha, conductor: assigned || '—', ruta: key, total: 0, exito: 0, fallido: 0, bo: 0 };
+                }
+                grouped[key].total++;
+                if (r.Resultado === 'ÉXITO') grouped[key].exito++;
+                else if (r.Resultado !== 'PENDIENTE') grouped[key].fallido++;
+                if (r.BO && r.BO.trim()) grouped[key].bo++;
+            });
+            let rows = Object.values(grouped)
+                .filter(g => dq ? g.conductor.toLowerCase().includes(dq) : true)
+                .filter(g => rq ? g.ruta === rq : true)
+                .map(g => ({ ...g, av: pct(g.exito, g.total) }));
+            rows.sort((a, b) => {
+                const dir = rutasSort.dir === 'asc' ? 1 : -1;
+                const numA = parseInt((a.ruta || '').match(/\d+/) || 0);
+                const numB = parseInt((b.ruta || '').match(/\d+/) || 0);
+                if (rutasSort.col === 'ruta') return dir * (numA - numB);
+                const col = rutasSort.col;
+                if (col === 'conductor' || col === 'fecha') return dir * (a[col] < b[col] ? -1 : a[col] > b[col] ? 1 : 0);
+                return dir * (a[col] - b[col]);
+            });
+            return rows;
+        }
+
+        function renderRutas() { rutasPage = 1; renderRutasPage(getRutasData()); }
+
+        function renderRutasPage(rows) {
+            const start = (rutasPage - 1) * RUTAS_PP, page = rows.slice(start, start + RUTAS_PP);
+            document.getElementById('rutasBody').innerHTML = page.map(g => {
+                const av = g.av, bc = av >= 70 ? '#10B981' : av >= 50 ? '#F59E0B' : '#EF4444';
+                return `<tr>
+      <td><span class="badge badge-blue">${g.ruta}</span></td>
+      <td><div style="display:flex;align-items:center;gap:8px"><div class="d-avatar" style="background:${gc(g.conductor)};width:26px;height:26px;font-size:10px">${ini(g.conductor)}</div>
+        <a class="stat-link" style="color:var(--ct-text)" onclick="goToIds({conductor:'${g.conductor}'})">${g.conductor}</a></div></td>
+      <td style="color:var(--ct-text-2);font-size:13px">${g.fecha}</td>
+      <td><a class="stat-link" style="font-weight:700;color:var(--ct-info)" onclick="goToIds({conductor:'${g.conductor}',ruta:'${g.ruta}'})">${g.total}</a></td>
+      <td><a class="stat-link" style="font-weight:700;color:var(--ct-ok)" onclick="goToIds({conductor:'${g.conductor}',ruta:'${g.ruta}',status:'ÉXITO'})">${g.exito}</a></td>
+      <td><a class="stat-link" style="font-weight:700;color:var(--ct-danger)" onclick="goToIds({conductor:'${g.conductor}',ruta:'${g.ruta}',status:'FALLIDO / INCIDENCIA'})">${g.fallido}</a></td>
+      <td><a class="stat-link" style="font-weight:700;color:var(--ct-warn)" onclick="goToIds({conductor:'${g.conductor}',ruta:'${g.ruta}',hasBO:true})">${g.bo}</a></td>
+      <td><div class="progress-cell"><div class="progress-track"><div class="progress-fill" style="width:${av}%;background:${bc}"></div></div><span class="pct-label" style="color:${bc}">${av}%</span></div></td>
+    </tr>`;
+            }).join('') || `<tr class="empty-row"><td colspan="8">Sin registros</td></tr>`;
+            renderPagination('rutasPagination', rows.length, RUTAS_PP, rutasPage, n => { rutasPage = n; renderRutasPage(rows); });
+        }
+
+        // ─── IDs ─────────────────────────────────────────────────────────────────────
+        let idsPage = 1, idsSort = { col: 'fecha', dir: 'asc' };
+        const IDS_PP = 20;
+
+        function sortIds(col) {
+            if (idsSort.col === col) idsSort.dir = idsSort.dir === 'asc' ? 'desc' : 'asc';
+            else { idsSort.col = col; idsSort.dir = 'asc'; }
+            renderIds();
+        }
+
+        function getIdsData() {
+            const data = getFiltered('ids');
+            const search = (document.getElementById('idSearch').value || '').toLowerCase();
+            const driver = (document.getElementById('idDriverSearch').value || '').toLowerCase();
+            const status = document.getElementById('idStatusFilter').value || '';
+            const ruta = document.getElementById('idRutaFilter').value || '';
+            const bo = document.getElementById('idBOFilter').value || '';
+            let rows = data.filter(r => {
+                if (status && r.Resultado !== status) return false;
+                if (ruta && r['Vehículo'] !== ruta) return false;
+                if (driver && !r.Conductor.toLowerCase().includes(driver)) return false;
+                if (bo) { const k = (r.BO || '').replace('GNV - ', '').replace('TI - ', '').replace('TI-', '').trim(); if (k !== bo) return false; }
+                if (search) return String(r['Id de referencia']).includes(search) || (r.Título || '').toLowerCase().includes(search) || String(r.Folio || '').includes(search);
+                return true;
+            });
+            rows.sort((a, b) => {
+                const dir = idsSort.dir === 'asc' ? 1 : -1;
+                const c = idsSort.col;
+                if (c === 'fecha' || c === 'hora' || c === 'ruta' || c === 'conductor' || c === 'resultado') {
+                    const va = c === 'ruta' ? a['Vehículo'] : c === 'conductor' ? a.Conductor : c === 'resultado' ? a.Resultado : c === 'hora' ? a.Hora : a.Fecha;
+                    const vb = c === 'ruta' ? b['Vehículo'] : c === 'conductor' ? b.Conductor : c === 'resultado' ? b.Resultado : c === 'hora' ? b.Hora : b.Fecha;
+                    return dir * ((va || '') < (vb || '') ? -1 : (va || '') > (vb || '') ? 1 : 0);
+                }
+                return dir * ((a[c] || 0) - (b[c] || 0));
+            });
+            return rows;
+        }
+
+        function renderIds() { idsPage = 1; renderIdsPage(getIdsData()); }
+
+        function renderIdsPage(rows) {
+            const start = (idsPage - 1) * IDS_PP, page = rows.slice(start, start + IDS_PP);
+            document.getElementById('idsBody').innerHTML = page.map(r => {
+                const ok = r.Resultado === 'ÉXITO';
+                const tit = (r.Título || '').replace(/^\d+_/, '').substring(0, 52);
+                return `<tr>
+      <td style="font-size:12px;font-weight:600;color:var(--ct-info)">${r['Id de referencia'] || '—'}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px" title="${(r.Título || '').replace(/"/g, "'")}">${tit || r['Id de referencia']}</td>
+      <td><span class="badge badge-blue" style="font-size:10px">${r['Vehículo']}</span></td>
+      <td style="font-size:13px">${r.Conductor}</td>
+      <td style="color:var(--ct-text-2);font-size:12px">${r.Fecha}</td>
+      <td style="color:var(--ct-text-2);font-size:12px">${(r.Hora || '').replace(/[\[\]]/g, '')}</td>
+      <td><span class="badge ${ok ? 'badge-green' : (r.Resultado === 'PENDIENTE' ? 'badge-blue' : 'badge-red')}">${ok ? '✓ Entregado' : (r.Resultado === 'PENDIENTE' ? '○ Pendiente' : '✗ Fallido')}</span></td>
+      <td><button class="btn-detail" onclick='openModal(${JSON.stringify(r).replace(/'/g, "&#39;")})'>Ver detalle</button></td>
+    </tr>`;
+            }).join('') || `<tr class="empty-row"><td colspan="8">Sin registros</td></tr>`;
+            renderPagination('idsPagination', rows.length, IDS_PP, idsPage, n => { idsPage = n; renderIdsPage(rows); });
+        }
+
+        // ─── PAGINATION ───────────────────────────────────────────────────────────────
+        function renderPagination(cid, total, pp, cur, onPage) {
+            const pages = Math.ceil(total / pp);
+            const el = document.getElementById(cid);
+            if (pages <= 1) { el.innerHTML = ''; return; }
+            let h = '';
+            const btn = p => `<button class="page-btn ${p === cur ? 'active' : ''}" onclick="(${onPage.toString()})(${p})">${p}</button>`;
+            if (cur > 1) h += `<button class="page-btn" onclick="(${onPage.toString()})(${cur - 1})">‹</button>`;
+            if (pages <= 6) { for (let i = 1; i <= pages; i++)h += btn(i); }
+            else { h += btn(1); if (cur > 3) h += '<span style="color:var(--ct-text-2);padding:0 4px">…</span>'; for (let i = Math.max(2, cur - 1); i <= Math.min(pages - 1, cur + 1); i++)h += btn(i); if (cur < pages - 2) h += '<span style="color:var(--ct-text-2);padding:0 4px">…</span>'; h += btn(pages); }
+            if (cur < pages) h += `<button class="page-btn" onclick="(${onPage.toString()})(${cur + 1})">›</button>`;
+            h += `<span class="page-info">${total} registros · pág. ${cur}/${pages}</span>`;
+            el.innerHTML = h;
+        }
+
+        // ─── MODAL ────────────────────────────────────────────────────────────────────
+        async function openModal(r) {
+            const ok = r.Resultado === 'ÉXITO';
+            const bop = r['_bop'] || r['Id de referencia'];
+            const tit = (r.Título || '').replace(/^\d+_/, '');
+
+            document.getElementById('modalTitle').textContent = tit || bop || '—';
+            document.getElementById('modalSubtitle').textContent =
+                `BOP: ${bop} | ${r['Vehículo']} · ${r.Conductor}`;
+            document.getElementById('mConductor').textContent = r.Conductor || '—';
+            document.getElementById('mRuta').textContent = r['Vehículo'] || '—';
+            document.getElementById('mDireccion').textContent = r.Dirección || '—';
+            document.getElementById('mEstatus').innerHTML =
+                `<span class="badge ${ok ? 'badge-green' : 'badge-red'}">${ok ? '✓ Entregado' : '✗ Fallido'}</span>`;
+            document.getElementById('mTiempo').textContent =
+                r['Tiempo de respuesta'] ? r['Tiempo de respuesta'] + ' min' : '—';
+            document.getElementById('mBO').textContent =
+                r.BO || r._bo_obs || 'Sin motivo registrado';
+
+            // Mostrar modal de inmediato con spinner mientras carga el hilo
+            document.getElementById('mTimeline').innerHTML =
+                `<div style="color:var(--ct-text-2);font-size:12px;padding:16px 0">⏳ Cargando hilo…</div>`;
+            document.getElementById('mEvidencias').innerHTML = '';
+            document.getElementById('modalOverlay').classList.add('open');
+
+            // Fetch del hilo real desde /api/thread/{bop}
+            try {
+                const fecha = r.Fecha || '';
+                const url = `/api/thread/${bop}${fecha ? '?fecha=' + fecha : ''}`;
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data = await resp.json();
+                renderThread(data.thread, ok);
+                renderEvidencias(data.thread, null);
+            } catch (e) {
+                console.warn('[Modal] Fallback a datos locales:', e);
+                renderThreadFallback(r, ok);
+                renderEvidencias(null, r._media || []);
+            }
+        }
+
+        function renderThread(thread, ok) {
+            if (!thread || thread.length === 0) {
+                document.getElementById('mTimeline').innerHTML =
+                    `<div style="color:var(--ct-text-2);font-size:12px;padding:16px 0">Sin mensajes registrados para este BOP.</div>`;
+                return;
+            }
+            document.getElementById('mTimeline').innerHTML = thread.map((msg, i) => {
+                const isLast = i === thread.length - 1;
+                const dot = msg.is_bo
+                    ? (ok ? '#10B981' : '#EF4444')
+                    : '#F59E0B';
+                const who = msg.is_bo ? 'BackOffice' : (msg.sender_name || 'Driver');
+                const hora = msg.hora || '—';
+
+                let desc = '';
+                if (msg.type === 'location' || (msg.type === 'text' && msg.content && msg.content.includes('maps.'))) {
+                    const url = msg.location ? msg.location.url : (msg.content.match(/https?:\/\/[^\s]+/) || [])[0];
+                    desc = `📍 Ubicación: <a href="${url}" target="_blank" style="color:var(--ct-teal);text-decoration:none">${url ? url.substring(0,40)+'...' : 'Ver mapa'}</a>`;
+                } else if (msg.type === 'image') {
+                    const cap = msg.media && msg.media.caption
+                        ? msg.media.caption.substring(0, 80) : '';
+                    desc = cap ? `📸 Foto — ${cap}` : '📸 Imagen adjunta';
+                } else if (msg.type === 'video') {
+                    const cap = msg.media && msg.media.caption
+                        ? msg.media.caption.substring(0, 80) : '';
+                    desc = cap ? `🎥 Video — ${cap}` : '🎥 Video adjunto';
+                } else {
+                    // Texto completo — limpiar markdown de WhatsApp
+                    desc = (msg.content || '')
+                        .replace(/\*/g, '')
+                        .replace(/\n/g, ' · ')
+                        .substring(0, 220);
+                }
+
+                return `<div class="tl-item">
+  <div class="tl-dot-col">
+    <div class="tl-dot" style="background:${dot}"></div>
+    ${!isLast ? '<div class="tl-line"></div>' : ''}
+  </div>
+  <div class="tl-content">
+    <div class="tl-time">${hora}</div>
+    <div class="tl-text">${who}</div>
+    <div class="tl-desc">${desc}</div>
+  </div>
+</div>`;
+            }).join('');
+        }
+
+        function renderThreadFallback(r, ok) {
+            // Usa los datos truncados ya disponibles en la fila (sin fetch)
+            const drvMsgs = (r._raw_drv || []);
+            const boMsgs = (r._raw_bo || []);
+            const hora = (r.Hora || '').replace(/[\[\]]/g, '') || '—';
+            const items = [];
+            items.push({ dot: '#3B82F6', time: '—', text: 'Asignado al conductor', desc: r['Vehículo'] || '—' });
+            drvMsgs.forEach(m => items.push({ dot: '#F59E0B', time: '', text: 'Reporte driver', desc: m }));
+            boMsgs.forEach(m => items.push({
+                dot: ok ? '#10B981' : '#EF4444', time: '', text: 'Respuesta BO', desc: m
+            }));
+            if (items.length === 1) items.push({
+                dot: ok ? '#10B981' : '#EF4444', time: hora,
+                text: ok ? 'Entrega exitosa' : 'Incidencia registrada',
+                desc: r.BO || r._driver_status || '—'
+            });
+            document.getElementById('mTimeline').innerHTML = items.map((t, i) => `
+<div class="tl-item">
+  <div class="tl-dot-col">
+    <div class="tl-dot" style="background:${t.dot}"></div>
+    ${i < items.length - 1 ? '<div class="tl-line"></div>' : ''}
+  </div>
+  <div class="tl-content">
+    <div class="tl-time">${t.time}</div>
+    <div class="tl-text">${t.text}</div>
+    <div class="tl-desc">${t.desc}</div>
+  </div>
+</div>`).join('');
+        }
+
+        function renderEvidencias(thread, mediaFallback) {
+            let media = [];
+            if (thread) {
+                media = thread
+                    .filter(m => m.type === 'image' || m.type === 'video' || m.type === 'location' || (m.type === 'text' && m.content && m.content.includes('maps.')))
+                    .map(m => {
+                        if (m.type === 'image') return m.media ? { ...m.media, type: 'image' } : null;
+                        if (m.type === 'video') return m.media ? { ...m.media, type: 'video' } : null;
+                        if (m.type === 'location') return m.location ? { ...m.location, type: 'location' } : null;
+                        if (m.type === 'text' && m.content.includes('maps.')) {
+                            const url = (m.content.match(/https?:\/\/[^\s]+/) || [])[0];
+                            return { type: 'location', url: url };
+                        }
+                        return null;
+                    })
+                    .filter(Boolean);
+            } else {
+                media = mediaFallback || [];
+            }
+
+            let eh = '';
+            media.forEach((item, i) => {
+                if (item.type === 'image') {
+                    const src = item.preview
+                        ? (item.preview.startsWith('data:') ? item.preview : `data:image/jpeg;base64,${item.preview}`)
+                        : (item.id ? `/media/${item.id}` : '');
+                    if (src) eh += `<div class="ev-photo" onclick="openLightbox('${src}', 'image')">
+  <img src="${src}" loading="lazy" alt="Foto ${i + 1}" onerror="this.parentElement.innerHTML='<div class=ev-photo-mock><svg viewBox=\\'0 0 24 24\\'><rect x=\\'3\\' y=\\'3\\' width=\\'18\\' height=\\'18\\' rx=\\'3\\'/><circle cx=\\'8.5\\' cy=\\'8.5\\' r=\\'1.5\\'/><path d=\\'M21 15l-5-5L5 21\\'/></svg>Sin preview</div>'">
+  <div class="ev-photo-label">📸 Foto ${i + 1}${item.caption ? ': ' + item.caption.substring(0, 20) : ''}</div>
+</div>`;
+                } else if (item.type === 'video') {
+                    const src = item.id ? `/media/${item.id}` : '';
+                    eh += `<div class="ev-photo" onclick="openLightbox('${src}', 'video')">
+  <div class="ev-photo-mock"><svg viewBox="0 0 24 24"><path d="M15 10l4.55-2.27A1 1 0 0 1 21 8.62v6.76a1 1 0 0 1-1.45.89L15 14v-4zM5 6h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/></svg>Ver Video</div>
+  <div class="ev-photo-label">🎥 Video ${i + 1}${item.caption ? ': ' + item.caption.substring(0, 20) : ''}</div>
+</div>`;
+                } else if (item.type === 'location') {
+                    const mapUrl = item.url || `https://maps.google.com/?q=${item.lat},${item.lon}`;
+                    eh += `<div class="ev-photo" onclick="window.open('${mapUrl}','_blank')">
+  <div class="ev-photo-mock"><svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>Ver Mapa</div>
+  <div class="ev-photo-label">📍 Ubicación ${i + 1}</div>
+</div>`;
+                }
+            });
+            if (!eh) eh = '<div style="color:var(--ct-text-2);font-size:12px;grid-column:span 3;padding:12px 0">Sin evidencias registradas</div>';
+            document.getElementById('mEvidencias').innerHTML = eh;
+        }
+
+        function openLightbox(url, type = 'image') {
+            const img = document.getElementById('lightboxImg');
+            let vid = document.getElementById('lightboxVid');
+            
+            if (!vid) {
+                vid = document.createElement('video');
+                vid.id = 'lightboxVid';
+                vid.controls = true;
+                vid.style.maxWidth = '90vw';
+                vid.style.maxHeight = '85vh';
+                vid.style.borderRadius = '8px';
+                vid.style.display = 'none';
+                img.parentElement.appendChild(vid);
+            }
+
+            if (type === 'video') {
+                img.style.display = 'none';
+                vid.style.display = 'block';
+                vid.src = url;
+                vid.play();
+            } else {
+                vid.style.display = 'none';
+                vid.play(); // pause basically
+                vid.pause();
+                img.style.display = 'block';
+                img.src = url;
+            }
+            document.getElementById('lightbox').classList.add('open');
+        }
+        function closeLightbox() { 
+            const vid = document.getElementById('lightboxVid');
+            if (vid) { vid.pause(); vid.src = ""; }
+            document.getElementById('lightbox').classList.remove('open'); 
+        }
+        function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
+        function closeModalOnOverlay(e) { if (e.target === document.getElementById('modalOverlay')) closeModal(); }
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeLightbox(); } });
+    </script>
+</body>
+
+</html>
