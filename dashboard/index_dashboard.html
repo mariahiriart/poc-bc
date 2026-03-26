@@ -1554,6 +1554,14 @@
                                 <div class="kpi-bar-fill" id="bar-reportado" style="background:var(--ct-warn)"></div>
                             </div>
                         </div>
+                        <div class="kpi-card accent-orange" id="kpi-card-norecognized" onclick="goToIds({noReconocido:true})" style="display:none">
+                            <div class="kpi-label">⚠ IDs No Reconocidos</div>
+                            <div class="kpi-value" id="kpi-no-reconocido">0</div>
+                            <div class="kpi-sub">IDs reportados <strong>fuera del Excel</strong></div>
+                            <div class="kpi-bar-track">
+                                <div class="kpi-bar-fill" id="bar-no-reconocido" style="background:#F97316;width:100%"></div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="charts-row">
@@ -1810,6 +1818,7 @@
                 '_raw_bo': d.raw_bo_msgs || [],
                 '_driver_status': d.driver_status || '',
                 '_bo_obs': d.bo_obs || '',
+                '_no_reconocido': d.no_reconocido || false,
             }));
         }
 
@@ -2075,7 +2084,16 @@
                 document.getElementById('idStatusFilter').value = 'FALLIDO / INCIDENCIA'; 
             }
             if (opts.syncDash) { DRP.ids.from = DRP.dash.from; DRP.ids.to = DRP.dash.to; }
-            
+            // Guardar filtro especial de no-reconocidos
+            window._filterNoReconocido = opts.noReconocido || false;
+            if (opts.noReconocido) {
+                // Limpiar otros filtros para mostrar solo no reconocidos
+                document.getElementById('idSearch').value = '';
+                document.getElementById('idDriverSearch').value = '';
+                document.getElementById('idStatusFilter').value = '';
+                document.getElementById('idRutaFilter').value = '';
+                document.getElementById('idBOFilter').value = '';
+            }
             showPage('ids', document.getElementById('nav-ids'));
             renderIds();
         }
@@ -2086,6 +2104,7 @@
             document.getElementById('idStatusFilter').value = '';
             document.getElementById('idRutaFilter').value = '';
             document.getElementById('idBOFilter').value = '';
+            window._filterNoReconocido = false;
             renderIds();
         }
 
@@ -2107,9 +2126,11 @@
         }
 
         function updateKPIs(data) {
-            const total = data.length, exito = data.filter(r => r.Resultado === 'ÉXITO').length;
-            const fallido = data.filter(r => r.Resultado === 'FALLIDO / INCIDENCIA').length;
-            const reportado = data.filter(r => r.BO && r.BO.trim()).length;
+            const total = data.filter(r => !r._no_reconocido).length;
+            const exito = data.filter(r => !r._no_reconocido && r.Resultado === 'ÉXITO').length;
+            const fallido = data.filter(r => !r._no_reconocido && r.Resultado === 'FALLIDO / INCIDENCIA').length;
+            const reportado = data.filter(r => !r._no_reconocido && r.BO && r.BO.trim()).length;
+            const noRec = data.filter(r => r._no_reconocido).length;
             const pe = pct(exito, total), pf = pct(fallido, total), pr = pct(reportado, total);
             document.getElementById('kpi-total').textContent = total;
             document.getElementById('kpi-exito').textContent = exito;
@@ -2121,6 +2142,10 @@
             document.getElementById('bar-exito').style.width = pe + '%';
             document.getElementById('bar-fallido').style.width = pf + '%';
             document.getElementById('bar-reportado').style.width = pr + '%';
+            // Tarjeta de no reconocidos: solo visible si hay alguno
+            const cardNR = document.getElementById('kpi-card-norecognized');
+            document.getElementById('kpi-no-reconocido').textContent = noRec;
+            cardNR.style.display = noRec > 0 ? '' : 'none';
         }
 
         function updateBarChart(data) {
@@ -2352,9 +2377,11 @@
             const status = document.getElementById('idStatusFilter').value || '';
             const ruta = document.getElementById('idRutaFilter').value || '';
             const bo = document.getElementById('idBOFilter').value || '';
+            const noRec = window._filterNoReconocido || false;
 
             // Labels sincrónicos
             const desc = [];
+            if (noRec) desc.push('⚠ Sin reconocer');
             if (search) desc.push(`"${search}"`);
             if (status) desc.push(status === 'ÉXITO' ? 'Entregados' : (status==='PENDIENTE'?'Pendientes':'Fallidos'));
             if (driver) desc.push('Conductor: ' + driver);
@@ -2363,13 +2390,16 @@
             document.getElementById('ids-filter-desc').textContent = desc.length ? 'Filtrado: ' + desc.join(' · ') : 'Listado completo';
 
             let rows = data.filter(r => {
-                // Si hay búsqueda por texto, le damos prioridad (pero solo si el texto coincide con ID/Título/Folio)
+                // Filtro exclusivo: solo no-reconocidos
+                if (noRec && !r._no_reconocido) return false;
+
+                // Si hay búsqueda por texto, tiene prioridad
                 if (search) {
                     const matchText = String(r['Id de referencia']).includes(search) || (r.Título || '').toLowerCase().includes(search) || String(r.Folio || '').includes(search);
                     if (!matchText) return false;
                 }
                 
-                // Filtros de select (solo aplican si el registro coincide)
+                // Filtros de select
                 if (status && r.Resultado !== status) return false;
                 if (ruta && r['Vehículo'] !== ruta) return false;
                 if (driver && !r.Conductor.toLowerCase().includes(driver)) return false;
@@ -2401,15 +2431,19 @@
                                  document.getElementById('idDriverSearch').value || 
                                  document.getElementById('idStatusFilter').value || 
                                  document.getElementById('idRutaFilter').value || 
-                                 document.getElementById('idBOFilter').value);
+                                 document.getElementById('idBOFilter').value ||
+                                 window._filterNoReconocido);
 
             document.getElementById('idsBody').innerHTML = page.map(r => {
                 const ok = r.Resultado === 'ÉXITO';
                 const tit = (r.Título || '').replace(/^\d+_/, '').substring(0, 52);
-                return `<tr>
-      <td style="font-size:12px;font-weight:600;color:var(--ct-info)">${r['Id de referencia'] || '—'}</td>
-      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px" title="${(r.Título || '').replace(/"/g, "'")}">${tit || r['Id de referencia']}</td>
-      <td><span class="badge badge-blue" style="font-size:10px">${r['Vehículo']}</span></td>
+                const isNR = r._no_reconocido;
+                const rowStyle = isNR ? 'background:rgba(249,115,22,0.07);border-left:3px solid #F97316;' : '';
+                const nrBadge = isNR ? `<span class="badge" style="background:#F97316;color:#fff;font-size:9px;margin-left:4px" title="Este ID no está en el Excel de rutas de hoy">⚠ No reconocido</span>` : '';
+                return `<tr style="${rowStyle}">
+      <td style="font-size:12px;font-weight:600;color:${isNR ? '#F97316' : 'var(--ct-info)'}">${r['Id de referencia'] || '—'}${nrBadge}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px" title="${(r.Título || '').replace(/"/g, "'")}">${tit || r['Id de referencia'] || '—'}</td>
+      <td><span class="badge badge-blue" style="font-size:10px">${r['Vehículo'] || '?'}</span></td>
       <td style="font-size:13px">${r.Conductor}</td>
       <td style="color:var(--ct-text-2);font-size:12px">${r.Fecha}</td>
       <td style="color:var(--ct-text-2);font-size:12px">${(r.Hora || '').replace(/[\[\]]/g, '')}</td>

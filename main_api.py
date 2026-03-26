@@ -197,17 +197,19 @@ def _build_payload_from_state(reps, bos, rutas, b2r, dn, fecha):
     Recibe estado como dicts puros — sin tocar globales.
     Usado tanto para el día en vivo (desde RAM) como para históricos (desde DB).
     """
-    detalle  = []
-    all_bops = set()
-    tiene_rutas = bool(b2r)
+    detalle           = []
+    detalle_extras    = []   # IDs reportados que NO están en el Excel
+    all_bops          = set()
+    excel_bops        = set(b2r.keys())  # Todos los IDs del Excel
+    tiene_rutas       = bool(b2r)
 
+    # ── Reportes reconocidos (presentes en el Excel) ─────────────────────────
     for bop, rep in reps.items():
-        if tiene_rutas and bop not in b2r:
-            continue
-        bo      = bos.get(bop, {})
+        bo       = bos.get(bop, {})
         ruta_eff = b2r.get(bop) or rep.get('ruta') or '?'
-        exitoso = is_exitoso(rep.get('status', ''))
-        detalle.append({
+        exitoso  = is_exitoso(rep.get('status', ''))
+
+        item = {
             'bop':           bop,
             'driver':        dn.get(ruta_eff) or rep.get('nombre', ''),
             'ruta':          ruta_eff,
@@ -221,14 +223,22 @@ def _build_payload_from_state(reps, bos, rutas, b2r, dn, fecha):
             'raw_drv_msgs':  rep.get('msgs', []),
             'raw_bo_msgs':   bo.get('msgs', []),
             'ultima_hora':   rep.get('hora', ''),
-        })
-        all_bops.add(bop)
+        }
 
+        if tiene_rutas and bop not in excel_bops:
+            # Este BOP fue reportado pero NO está en el Excel → extra/no reconocido
+            item['no_reconocido'] = True
+            detalle_extras.append(item)
+        else:
+            detalle.append(item)
+            all_bops.add(bop)
+
+    # ── Solo BO, sin reporte de driver ───────────────────────────────────────
     for bop, bo in bos.items():
         if bop in all_bops:
             continue
         ruta_eff = b2r.get(bop, '?')
-        detalle.append({
+        item = {
             'bop': bop, 'driver': dn.get(ruta_eff) or 'Solo BO',
             'ruta': ruta_eff,
             'status_final': 'Fallido / Incidencia',
@@ -238,12 +248,18 @@ def _build_payload_from_state(reps, bos, rutas, b2r, dn, fecha):
             'bo_obs':       bo.get('bo_obs', ''),
             'raw_drv_msgs': [], 'raw_bo_msgs': bo.get('msgs', []),
             'ultima_hora':  bo.get('hora', ''),
-        })
-        all_bops.add(bop)
+        }
+        if tiene_rutas and bop not in excel_bops:
+            item['no_reconocido'] = True
+            detalle_extras.append(item)
+        else:
+            detalle.append(item)
+            all_bops.add(bop)
 
+    # ── Sin reporte: asignados pero sin ningún mensaje ────────────────────────
     sin_reporte_vistos = set()
     for ruta, bops_asig in rutas.items():
-        for bop in bops_asig:  # <--- Fix: Missing loop
+        for bop in bops_asig:
             if bop not in all_bops and bop not in sin_reporte_vistos:
                 detalle.append({
                     'bop': bop, 'driver': dn.get(ruta, '—'), 'ruta': ruta,
@@ -257,11 +273,18 @@ def _build_payload_from_state(reps, bos, rutas, b2r, dn, fecha):
                 sin_reporte_vistos.add(bop)
 
     detalle.sort(key=lambda x: (x['ruta'], x['bop']))
-    total    = len(detalle)
+    # Los extras van al final, ordenados también
+    detalle_extras.sort(key=lambda x: x['bop'])
+
+    total    = len(detalle)            # Solo Excel BOPs — no cambia con extras
     exitosos = sum(1 for d in detalle if d['status_final'] == 'Exito')
     fallidos = sum(1 for d in detalle if d['status_final'] == 'Fallido / Incidencia')
     con_bo   = sum(1 for d in detalle if d['bo_status'] != 'N/A')
     faltantes = total - (exitosos + fallidos)
+    no_reconocidos = len(detalle_extras)
+
+    # Combinamos al final: primero los reconocidos, luego los extras
+    detalle = detalle + detalle_extras
 
     rutas_out = []
     for ruta, bops_asig in sorted(rutas.items(),
@@ -286,10 +309,11 @@ def _build_payload_from_state(reps, bos, rutas, b2r, dn, fecha):
             'total_asignados':   total,
             'total_reportados':  exitosos + fallidos,
             'total_sin_reporte': faltantes,
-            'exitosos':   exitosos,
-            'fallidos':   fallidos,
-            'con_bo':     con_bo,
-            'pct_exito':  round(exitosos / total * 100, 1) if total else 0,
+            'exitosos':          exitosos,
+            'fallidos':          fallidos,
+            'con_bo':            con_bo,
+            'pct_exito':         round(exitosos / total * 100, 1) if total else 0,
+            'no_reconocidos':    no_reconocidos,
         },
         'rutas':              rutas_out,
         'detalle_reportados': detalle,
