@@ -674,6 +674,23 @@ def api_backfill():
     init_today()
     return {'ok': True}
 
+@app.get("/api/debug-extra-bops")
+async def debug_extra_bops():
+    from datetime import date
+    date_str = str(date.today())
+    # Bops en assigned desde stats
+    ids_in_stats = set(assigned_packages.keys())
+    # Bops en excel
+    rutas, bops_xlsx = descargar_xlsx_doc(date_str)
+    excel_ids = set(bops_xlsx.keys())
+    
+    extra = ids_in_stats - excel_ids
+    return {
+        "total_in_stats": len(ids_in_stats), 
+        "total_in_excel": len(excel_ids), 
+        "extra_ids": list(extra)
+    }
+
 @app.post('/api/reload-messages')
 def reload_messages():
     """Limpia el estado del dia y recarga mensajes desde la BD (util tras fetch_current.py)."""
