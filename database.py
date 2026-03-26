@@ -256,16 +256,6 @@ def load_bop_thread(bop_id: str, date_str: str = None):
     Devuelve todos los mensajes raw que mencionan un BOP específico,
     ordenados cronológicamente. Incluye texto, imágenes y ubicaciones
     del driver y del backoffice.
-
-    La búsqueda incluye:
-    - Mensajes de texto con el BOP en el contenido
-    - Imágenes cuyo caption menciona el BOP
-    - Ubicaciones enviadas por el mismo driver justo antes/después (±5 min)
-      asociadas al BOP via last_bop_phone heuristic en raw_json context
-
-    Parámetros:
-        bop_id:    7 dígitos del BOP
-        date_str:  'YYYY-MM-DD' en hora México (CST). Si es None, busca todo.
     """
     conn = get_connection()
     cur  = conn.cursor()
@@ -354,7 +344,6 @@ def load_bop_thread(bop_id: str, date_str: str = None):
                     'preview': img.get('preview', ''),
                     'caption': caption,
                 }
-                # Limpiar preview si es muy grande (>50KB base64 ~ 66KB raw)
                 if item['media']['preview'] and len(item['media']['preview']) > 70000:
                     item['media']['preview'] = ''
 
@@ -377,4 +366,35 @@ def load_bop_thread(bop_id: str, date_str: str = None):
         print(f"[DB] load_bop_thread {bop_id}: {e}")
         return []
     finally:
-        cur.close(); conn.close()
+        if 'cur' in locals() and cur: cur.close()
+        if 'conn' in locals() and conn: conn.close()
+
+def get_last_bops_for_phone(phone: str, date_str: str) -> list:
+    """Retorna los IDs de los últimos BOPs reportados por un teléfono hoy."""
+    conn = None
+    cur  = None
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        query_id = """
+            SELECT r.raw_message_id
+            FROM driver_reports r
+            JOIN raw_messages m ON r.raw_message_id = m.id
+            WHERE m.sender_phone = %s 
+              AND TO_CHAR(m.sent_at AT TIME ZONE 'UTC' AT TIME ZONE 'CST', 'YYYY-MM-DD') = %s
+            ORDER BY m.sent_at DESC
+            LIMIT 1
+        """
+        cur.execute(query_id, (phone, date_str))
+        row = cur.fetchone()
+        if not row: return []
+        
+        query_bops = "SELECT idbop FROM driver_reports WHERE raw_message_id = %s"
+        cur.execute(query_bops, (row[0],))
+        return [str(r[0]) for r in cur.fetchall()]
+    except Exception as e:
+        print(f"[DB] get_last_bops_for_phone {phone}: {e}")
+        return []
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()

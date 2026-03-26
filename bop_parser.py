@@ -79,8 +79,14 @@ def extract_bop(text: str) -> list:
             return bops
 
     # Paso 2 — sin etiqueta pero con contexto de reporte
-    if re.search(r'estatus|status|IdBop|🧾', text, re.I):
+    if re.search(r'estatus|status|IdBop|🧾|punto|ruta', text, re.I):
         return re.findall(r'\b(\d{7})\b', text)
+
+    # Paso 3 — ULTRADERIVADO: Buscar cualquier número de 7 dígitos que parezca un BOP
+    # (los BOPs de Brightcell suelen empezar con 3 o 4)
+    all_7 = re.findall(r'\b([34]\d{6})\b', text)
+    if all_7:
+        return all_7
 
     return []
 

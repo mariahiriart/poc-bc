@@ -361,11 +361,25 @@ def procesar_mensaje(msg):
         caption_bops = extract_bop(caption) if caption else []
         with state_lock:
             target_bops = caption_bops if caption_bops else last_bops_by_phone.get(phone, [])
-            for bop in target_bops:
-                _add_media_to_bop(bop, item)
+        
+        # Fallback DB si no hay contexto en memoria
+        if not target_bops:
+            try:
+                last_db_bops = database.get_last_bops_for_phone(phone, today_str)
+                if last_db_bops:
+                    target_bops = last_db_bops
+                    print(f'[MEDIA] Asociando imagen a BOPs del DB: {target_bops}', flush=True)
+            except Exception: pass
+
+        if target_bops:
+            with state_lock:
+                for bop in target_bops:
+                    _add_media_to_bop(bop, item)
+        
         if not caption:
             return None
         text = caption
+
     if mtype == 'video':
         vid     = msg.get('video') or {}
         caption = vid.get('caption', '') or ''
@@ -378,8 +392,20 @@ def procesar_mensaje(msg):
         caption_bops = extract_bop(caption) if caption else []
         with state_lock:
             target_bops = caption_bops if caption_bops else last_bops_by_phone.get(phone, [])
-            for bop in target_bops:
-                _add_media_to_bop(bop, item)
+
+        if not target_bops:
+            try:
+                last_db_bops = database.get_last_bops_for_phone(phone, today_str)
+                if last_db_bops:
+                    target_bops = last_db_bops
+                    print(f'[MEDIA] Asociando video a BOPs del DB: {target_bops}', flush=True)
+            except Exception: pass
+
+        if target_bops:
+            with state_lock:
+                for bop in target_bops:
+                    _add_media_to_bop(bop, item)
+        
         if not caption:
             return None
         text = caption
