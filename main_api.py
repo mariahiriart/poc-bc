@@ -63,47 +63,51 @@ today_str = mexico_now().strftime('%Y-%m-%d')
 # ── CARGAR XLSX DEL DIA ────────────────────────────────────────────────────────
 def load_xlsx(fecha_str):
     global rutas_csv, bop_to_ruta
+    import glob
     parts = fecha_str.split('-')
     if len(parts) < 3: return
     d = parts[2]
-    fname = os.path.join(BASE_DIR, f'rutas_{d}_mzo.xlsx')
     
-    print(f'[API] Intentando cargar XLSX: {fname}', flush=True)
-    print(f'[API] BASE_DIR: {BASE_DIR}', flush=True)
-    print(f'[API] Archivos en BASE_DIR: {os.listdir(BASE_DIR)}', flush=True)
+    patron = os.path.join(BASE_DIR, f'rutas_{d}_*.xlsx')
+    print(f'[XLSX] Buscando patron: {patron}', flush=True)
+    potential = glob.glob(patron)
+    if not potential:
+        # Fallback total: cualquier rutas*.xlsx
+        potential = glob.glob(os.path.join(BASE_DIR, 'rutas*.xlsx'))
+        print(f'[XLSX] Fallback general: {potential}', flush=True)
 
-    if not os.path.exists(fname):
-        print(f'[API] ERROR: xlsx no encontrado: {fname}')
-        # Fallback: buscar cualquier xlsx que empiece con rutas_XX
-        all_xlsx = [f for f in os.listdir(BASE_DIR) if f.startswith('rutas_') and f.endswith('.xlsx')]
-        if all_xlsx:
-            fname = os.path.join(BASE_DIR, all_xlsx[0])
-            print(f'[API] Usando fallback: {fname}')
-        else:
-            return
+    if not potential:
+        print('[XLSX] No se encontro ninguna planilla de rutas en BASE_DIR', flush=True)
+        return
+
+    fname = potential[0]
+    print(f'[XLSX] Cargando: {fname}', flush=True)
 
     try:
         wb = openpyxl.load_workbook(fname, data_only=True)
         ws = wb.active
         rutas = {}
         processed = 0
+        print(f'[XLSX] Sheet activa: {ws.title}, max_row: {ws.max_row}', flush=True)
+        
         for row in ws.iter_rows(min_row=2, values_only=True):
             if not row or len(row) < 6: continue
             vehiculo = str(row[1]).strip() if row[1] else None
             bop      = str(row[5]).strip() if row[5] else None
-            if not vehiculo or not bop or len(bop) != 7:
+            if not vehiculo or not bop or len(bop) < 4:
                 continue
             ruta = vehiculo
             rutas.setdefault(ruta, [])
             if bop not in rutas[ruta]:
                 rutas[ruta].append(bop)
                 processed += 1
+        
         with state_lock:
             rutas_csv   = rutas
             bop_to_ruta = {b: r for r, bops in rutas.items() for b in bops}
-        print(f'[API] Exito: {len(rutas)} rutas, {processed} BOPs cargados desde {fname}', flush=True)
+        print(f'[XLSX] SUCCESS: {len(rutas)} rutas, {processed} BOPs cargados.', flush=True)
     except Exception as e:
-        print(f'[API] Error cargando workbook {fname}: {e}', flush=True)
+        print(f'[XLSX] CRITICAL ERROR: {e}', flush=True)
 
 # ── ASIGNACION DRIVER-RUTA DESDE IMAGEN DE ROBERTO ────────────────────────────
 def _descargar_media(media_id):
