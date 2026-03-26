@@ -243,6 +243,7 @@ def _build_payload_from_state(reps, bos, rutas, b2r, dn, fecha):
 
     sin_reporte_vistos = set()
     for ruta, bops_asig in rutas.items():
+        for bop in bops_asig:  # <--- Fix: Missing loop
             if bop not in all_bops and bop not in sin_reporte_vistos:
                 detalle.append({
                     'bop': bop, 'driver': dn.get(ruta, '—'), 'ruta': ruta,
