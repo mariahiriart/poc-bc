@@ -121,7 +121,7 @@ def load_day_messages(date_str):
     cur  = conn.cursor()
     try:
         cur.execute("""
-            SELECT raw_json, sender_name
+            SELECT id, raw_json, sender_name
             FROM raw_messages
             WHERE sent_at >= (%s::date + interval '6 hours')
               AND sent_at <  (%s::date + interval '1 day' + interval '6 hours')
@@ -130,12 +130,14 @@ def load_day_messages(date_str):
         """, (date_str, date_str))
         rows = cur.fetchall()
         msgs = []
-        for raw_json, sender_name in rows:
+        for row_id, raw_json, sender_name in rows:
             if not raw_json:
                 continue
             msg = dict(raw_json) if isinstance(raw_json, dict) else json.loads(raw_json)
             if sender_name and not msg.get('from_name'):
                 msg['from_name'] = sender_name
+            # IMPORTANTE: preservamos el ID real de la base de datos (UUID)
+            msg['raw_id'] = str(row_id)
             msgs.append(msg)
         return msgs
     except Exception as e:
