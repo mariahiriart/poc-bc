@@ -631,6 +631,16 @@ def reload_routes():
     init_today()
     return {'ok': True, 'msg': 'Rutas y mensajes de hoy recargados correctamente'}
 
+@app.get('/api/debug-files')
+def debug_files():
+    import os
+    return {
+        'cwd': os.getcwd(),
+        'base_dir': BASE_DIR,
+        'root_files': os.listdir('.'),
+        'base_files': os.listdir(BASE_DIR)
+    }
+
 @app.post('/api/backfill')
 def api_backfill():
     import backfill_today
