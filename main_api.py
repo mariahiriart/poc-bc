@@ -170,24 +170,23 @@ def cargar_driver_names_desde_disco():
         except Exception as e:
             print(f'[ASIG] Error leyendo driver_names.json: {e}', flush=True)
 
-# ── DESCARGA AUTOMATICA DE XLSX DESDE JACOB ───────────────────────────────────
-def descargar_xlsx_de_jacob(doc_id, filename):
-    m = re.search(r'para\s+(\d+)\s+MZO', filename, re.I)
-    if not m:
-        print(f'[XLSX] No se pudo extraer dia del nombre: {filename}', flush=True)
-        return
-    day      = int(m.group(1))
+# ── DESCARGA AUTOMATICA DE XLSX DESDE CUALQUIER CHAT AUTORIZADO ────────────────
+def descargar_xlsx_doc(doc_id, filename):
+    # Intentamos extraer el día (ej: "26 MZO" o "26 de marzo")
+    m = re.search(r'(\d+)\s+(MZO|marzo)', filename, re.I)
+    day = int(m.group(1)) if m else mexico_now().day
     out_name = f'rutas_{day:02d}_mzo.xlsx'
     out_path = os.path.join(BASE_DIR, out_name)
     try:
         data = _descargar_media(doc_id)
         with open(out_path, 'wb') as f:
             f.write(data)
-        print(f'[XLSX] Descargado: {out_name} ({len(data)} bytes)', flush=True)
+        print(f'[XLSX] Descargado: {out_name} ({len(data)} bytes) desde {filename}', flush=True)
+        # Recargar inmediatamente las rutas del día actual si el archivo coincide
         hoy = mexico_now()
         if day == hoy.day:
             load_xlsx(hoy.strftime('%Y-%m-%d'))
-            print(f'[XLSX] Rutas recargadas para hoy (dia {day})', flush=True)
+            print(f'[XLSX] Dashboard actualizado con {len(rutas_csv)} rutas y {sum(len(v) for v in rutas_csv.values())} BOPs.', flush=True)
     except Exception as e:
         print(f'[XLSX] Error descargando {doc_id}: {e}', flush=True)
 
@@ -960,7 +959,7 @@ def _procesar_y_actualizar(msg):
         fname  = doc.get('filename', '')
         doc_id = doc.get('id', '')
         if fname.lower().endswith('.xlsx') and doc_id:
-            descargar_xlsx_de_jacob(doc_id, fname)
+            descargar_xlsx_doc(doc_id, fname)
         return
 
     if (msg.get('type') == 'image' and msg.get('from') == ROBERTO_PHONE
