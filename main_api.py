@@ -46,6 +46,8 @@ last_bops_by_phone = {}
 rutas_csv          = {}
 bop_to_ruta        = {}
 driver_names       = {}
+pending_media_by_phone = {} # buffer de evidencia reciente
+
 
 MEXICO_OFFSET = -6 * 3600  # CST = UTC-6 (mantenido para compatibilidad con fmt_hour legacy)
 
@@ -340,9 +342,37 @@ def regenerar_dashboard():
 # ── PROCESAR UN MENSAJE ────────────────────────────────────────────────────────
 def _add_media_to_bop(bop, item):
     if bop and bop in bop_reports:
-        bop_reports[bop].setdefault('media', []).append(item)
+        media_list = bop_reports[bop].setdefault('media', [])
+        # Evitar duplicados exactos
+        if item.get('id'):
+            if any(m.get('id') == item['id'] for m in media_list): return
+        elif item.get('type') == 'location':
+            if any(m.get('type') == 'location' and m.get('lat') == item['lat'] and m.get('lon') == item['lon'] for m in media_list): return
+            
+        media_list.append(item)
         if item['type'] == 'image':
             bop_reports[bop]['imgs'] = bop_reports[bop].get('imgs', 0) + 1
+
+def _buffer_media_and_assign(phone, item, target_bops, ts):
+    # Guarda en el buffer (hasta 10 min) y asigna a target_bops actual
+    with state_lock:
+        queue = pending_media_by_phone.setdefault(phone, [])
+        queue.append({'ts': ts, 'item': item})
+        # Limpiar
+        pending_media_by_phone[phone] = [x for x in queue if ts - x['ts'] < 600]
+        
+        if target_bops:
+            for bop in target_bops:
+                _add_media_to_bop(bop, item)
+
+def _retro_assign_buffered_media(phone, new_bops, ts):
+    # Re-asigna media de los ultimos 5 min a estos nuevos bops (por si llegaron antes del texto)
+    with state_lock:
+        queue = pending_media_by_phone.get(phone, [])
+        for q in queue:
+            if abs(ts - q['ts']) < 300: # ventana de 5 mins
+                for bop in new_bops:
+                    _add_media_to_bop(bop, q['item'])
 
 def procesar_mensaje(msg):
     """
@@ -369,8 +399,7 @@ def procesar_mensaje(msg):
             }
             with state_lock:
                 last_bops = last_bops_by_phone.get(phone, [])
-                for bop in last_bops:
-                    _add_media_to_bop(bop, item)
+            _buffer_media_and_assign(phone, item, last_bops, ts)
         return None
 
     if mtype == 'image':
@@ -396,9 +425,9 @@ def procesar_mensaje(msg):
             except Exception: pass
 
         if target_bops:
-            with state_lock:
-                for bop in target_bops:
-                    _add_media_to_bop(bop, item)
+            pass # Solo para logica; la asignacion real se hace abajo con _buffer_media
+            
+        _buffer_media_and_assign(phone, item, target_bops, ts)
         
         if not caption:
             return None
@@ -426,9 +455,9 @@ def procesar_mensaje(msg):
             except Exception: pass
 
         if target_bops:
-            with state_lock:
-                for bop in target_bops:
-                    _add_media_to_bop(bop, item)
+            pass
+            
+        _buffer_media_and_assign(phone, item, target_bops, ts)
         
         if not caption:
             return None
@@ -499,19 +528,24 @@ def procesar_mensaje(msg):
                     bop_reports[bop]['hora']   = hora
                 bop_reports[bop]['msgs'].append(f'{hora} {nombre}: {text[:100]}')
             last_bops_by_phone[phone] = list(all_bops_msg)
+        
+        # Rescate de media enviada ANTES del texto!
+        _retro_assign_buffered_media(phone, all_bops_msg, ts)
+        
         print(f'[RT] DRV BOPs={all_bops_msg} status={r["status"]}', flush=True)
         return {'type': 'driver', 'bops': all_bops_msg, 'parsed': r, 'nombre': nombre}
     return None
 
 # ── ROLLOVER DE MEDIANOCHE ─────────────────────────────────────────────────────
 def _reset_estado_dia():
-    global bop_reports, bo_responses, last_bops_by_phone, rutas_csv, bop_to_ruta
+    global bop_reports, bo_responses, last_bops_by_phone, rutas_csv, bop_to_ruta, pending_media_by_phone
     with state_lock:
         bop_reports        = {}
         bo_responses       = {}
         last_bops_by_phone = {}
         rutas_csv          = {}
         bop_to_ruta        = {}
+        pending_media_by_phone = {}
     print('[ROLLOVER] Estado en memoria limpiado.', flush=True)
 
 def _watcher_medianoche():
