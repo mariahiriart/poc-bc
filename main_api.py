@@ -851,6 +851,44 @@ def api_thread(bop_id: str, fecha: str = None):
 
     try:
         thread = database.load_bop_thread(bop_id, fecha_local)
+        
+        # INYECCIÓN DE MEDIA HUÉRFANA DESDE LA MEMORIA
+        with state_lock:
+            mem_media = (bop_reports.get(bop_id) or {}).get('media', [])
+            
+        thread_ids = {t.get('id') for t in thread if t.get('id')}
+        thread_locs = {f"{t['location']['lat']}_{t['location']['lon']}" for t in thread if t.get('location')}
+
+        for m in mem_media:
+            # Evitar duplicados con los q ya extrajo el DB
+            if m.get('id') and m['id'] in thread_ids: continue
+            if m.get('type') == 'location' and f"{m.get('lat')}_{m.get('lon')}" in thread_locs: continue
+            
+            dummy_item = {
+                'id': m.get('id', ''),
+                'sender_name': 'Driver (Evidencia)',
+                'sender_phone': '',
+                'type': m.get('type') or 'image',
+                'sent_at': '',
+                'hora': m.get('hora', ''),
+                'is_bo': False,
+                'content': '',
+                'media': None,
+                'location': None
+            }
+            if m.get('type') == 'location':
+                dummy_item['location'] = {
+                    'lat': m.get('lat'), 'lon': m.get('lon'),
+                    'url': m.get('url')
+                }
+            else:
+                dummy_item['media'] = m
+            
+            thread.append(dummy_item)
+
+        def get_hora(t):
+            return t.get('hora') or '99:99'
+        thread.sort(key=get_hora)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
