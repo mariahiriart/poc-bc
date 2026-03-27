@@ -571,12 +571,71 @@ def _descargar_mensajes_whapi(fecha_str):
     all_msgs.sort(key=lambda m: m.get('timestamp', 0))
     return all_msgs
 
+def rescatar_archivos_contexto(fecha_str):
+    import datetime as dt_lib
+    y, mo, d = int(fecha_str[:4]), int(fecha_str[5:7]), int(fecha_str[8:10])
+    dt_hoy = datetime(y, mo, d, 0, 0, 0)
+    MEXICO_OFFSET_S = 6 * 3600
+
+    headers = {'Authorization': f'Bearer {TOKEN}', 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0'}
+    
+    # 1. Rescatar XLSX (Ayer 18:00 a 23:59)
+    target_fname = f'rutas_{d:02d}_mzo.xlsx'
+    if not os.path.exists(os.path.join(BASE_DIR, target_fname)):
+        dt_ayer_18 = dt_hoy - dt_lib.timedelta(hours=6)  # Ayer 18:00
+        dt_ayer_23 = dt_hoy - dt_lib.timedelta(seconds=1) # Ayer 23:59:59
+        ts_inicio = int(dt_ayer_18.timestamp()) + MEXICO_OFFSET_S
+        ts_fin    = int(dt_ayer_23.timestamp()) + MEXICO_OFFSET_S
+        
+        try:
+            url = f'https://gate.whapi.cloud/messages/list/{XLSX_CHAT_ID}?count=100'
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=15) as r:
+                data = json.loads(r.read())
+            for m in data.get('messages', []):
+                ts_m = m.get('timestamp', 0)
+                if ts_inicio <= ts_m <= ts_fin and m.get('type') == 'document':
+                    doc = m.get('document') or {}
+                    fname = doc.get('filename', '')
+                    if fname.lower().endswith('.xlsx') and doc.get('id'):
+                        print(f'[INIT] Rescatando XLSX perdido de anoche: {fname}', flush=True)
+                        descargar_xlsx_doc(doc.get('id'), fname)
+                        break
+        except Exception as e:
+            print(f'[INIT] Error rescatando XLSX: {e}')
+
+    # 2. Rescatar Imagen Asignacion (Hoy 06:00 a 08:59)
+    dt_hoy_06 = dt_hoy + dt_lib.timedelta(hours=6) # 06:00
+    dt_hoy_09 = dt_hoy + dt_lib.timedelta(hours=9) # 09:00 (hasta las 08:59:59)
+    ts_inicio_img = int(dt_hoy_06.timestamp()) + MEXICO_OFFSET_S
+    ts_fin_img    = int(dt_hoy_09.timestamp()) + MEXICO_OFFSET_S
+
+    try:
+        url = f'https://gate.whapi.cloud/messages/list/{XLSX_CHAT_ID}?count=100'
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = json.loads(r.read())
+        for m in data.get('messages', []):
+            ts_m = m.get('timestamp', 0)
+            if ts_inicio_img <= ts_m <= ts_fin_img and m.get('type') == 'image' and m.get('from') == ROBERTO_PHONE:
+                img_id = (m.get('image') or {}).get('id', '')
+                if img_id:
+                    print(f'[INIT] Rescatando imagen asignacion de Roberto de esta mañana: {img_id}', flush=True)
+                    threading.Thread(target=procesar_imagen_asignacion, args=(img_id,), daemon=True).start()
+                    break
+    except Exception as e:
+        print(f'[INIT] Error rescatando Imagen: {e}')
+
 def init_today():
     global today_str
     fecha = mexico_now().strftime('%Y-%m-%d')
     with state_lock:
         today_str = fecha
     print(f'[API] Inicializando dia {fecha}...', flush=True)
+
+    # Rescatar archivos de contexto (Excel e Imagen) en sus ventanas de tiempo estrictas
+    if TOKEN:
+        rescatar_archivos_contexto(fecha)
 
     load_xlsx(fecha)
     cargar_driver_names_desde_disco()
@@ -592,7 +651,7 @@ def init_today():
         print(f'[API] BD vacia — descargando desde Whapi...', flush=True)
         msgs_hoy = _descargar_mensajes_whapi(fecha)
 
-    # Al cargar historico no guardamos en DB (ya estan en raw_messages)
+    # Ahora procesar el resto de mensajes, que estrictamente son los de hoy 00:00 en adelante
     for m in msgs_hoy:
         procesar_mensaje(m)
 
