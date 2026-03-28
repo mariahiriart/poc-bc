@@ -374,3 +374,4 @@ if __name__ == '__main__':
     fechas = sys.argv[1:] if len(sys.argv) > 1 else [hoy_mx]
     for fecha in fechas:
         procesar_dia(fecha)
+        
