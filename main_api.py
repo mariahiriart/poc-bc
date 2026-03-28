@@ -63,66 +63,110 @@ def mexico_now():
 today_str = mexico_now().strftime('%Y-%m-%d')
 
 # ── CARGAR XLSX DEL DIA ────────────────────────────────────────────────────────
+def _parse_xlsx_bytes(raw_bytes, source_label=''):
+    """
+    Parsea bytes de un xlsx y devuelve dict {ruta: [bops]}.
+    Centraliza la lógica para no duplicarla entre disco y Postgres.
+    """
+    import io
+    rutas = {}
+    processed = 0
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(raw_bytes), data_only=True)
+        ws = wb.active
+        print(f'[XLSX] Sheet activa: {ws.title} | fuente: {source_label}', flush=True)
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if not row or len(row) < 6: continue
+            vehiculo = str(row[1]).strip() if row[1] is not None else None
+            bop      = str(row[5]).strip() if row[5] is not None else None
+            if not vehiculo or not bop or len(bop) < 4:
+                continue
+            rutas.setdefault(vehiculo, [])
+            if bop not in rutas[vehiculo]:
+                rutas[vehiculo].append(bop)
+                processed += 1
+        print(f'[XLSX] Parseado: {len(rutas)} rutas, {processed} BOPs.', flush=True)
+    except Exception as e:
+        print(f'[XLSX] Error parseando xlsx ({source_label}): {e}', flush=True)
+    return rutas
+
+
 def load_xlsx(fecha_str):
+    """
+    Carga el xlsx de rutas para la fecha dada.
+    Orden de prioridad:
+      1. Disco (archivo con nombre exacto del día)
+      2. Postgres (xlsx_files table)
+      3. Disco fallback filtrado por día (evita cargar xlsx del día incorrecto)
+    """
     global rutas_csv, bop_to_ruta
-    import glob
+    import glob, io
     parts = fecha_str.split('-')
     if len(parts) < 3: return
-    d = parts[2]
+    d       = parts[2]        # '28' (sin padding puede ser '7')
+    day_int = int(d)
 
-    patron = os.path.join(BASE_DIR, f'rutas_{d}_*.xlsx')
-    print(f'[XLSX] Buscando patron: {patron}', flush=True)
+    # 1. Buscar en disco con patrón exacto del día
+    patron    = os.path.join(BASE_DIR, f'rutas_{d}_*.xlsx')
     potential = glob.glob(patron)
-
     if not potential:
-        # FIX: Fallback inteligente — solo aceptar xlsx que contengan el día correcto en el nombre.
-        # Evita cargar el xlsx de otro día (causa del bug de "IDs no encontrados").
-        day_int = int(d)
+        # También probar con padding (rutas_07_mzo.xlsx para día 7)
+        patron_pad = os.path.join(BASE_DIR, f'rutas_{day_int:02d}_mzo.xlsx')
+        if os.path.exists(patron_pad):
+            potential = [patron_pad]
+
+    rutas = {}
+
+    if potential:
+        fname = potential[0]
+        print(f'[XLSX] Cargando desde disco: {fname}', flush=True)
+        try:
+            with open(fname, 'rb') as f:
+                raw = f.read()
+            rutas = _parse_xlsx_bytes(raw, source_label=fname)
+        except Exception as e:
+            print(f'[XLSX] Error leyendo disco {fname}: {e}', flush=True)
+
+    # 2. Fallback Postgres si el disco no dio resultados
+    if not rutas:
+        print(f'[XLSX] No encontrado en disco — buscando en Postgres para {fecha_str}...', flush=True)
+        result = database.load_route_file_bytes(fecha_str)
+        if result:
+            filename, raw_bytes = result
+            # Guardar en disco para futuros accesos
+            out_path = os.path.join(BASE_DIR, f'rutas_{day_int:02d}_mzo.xlsx')
+            try:
+                with open(out_path, 'wb') as f:
+                    f.write(raw_bytes)
+                print(f'[XLSX] Restaurado desde Postgres a disco: {out_path}', flush=True)
+            except Exception as e:
+                print(f'[XLSX] No se pudo escribir disco (continuamos desde memoria): {e}', flush=True)
+            rutas = _parse_xlsx_bytes(raw_bytes, source_label=f'Postgres:{filename}')
+
+    # 3. Último recurso: cualquier xlsx del día correcto en disco (evita día incorrecto)
+    if not rutas:
         all_candidates = glob.glob(os.path.join(BASE_DIR, 'rutas*.xlsx'))
-        # Filtrar los que tengan el número de día correcto en el nombre
-        potential = [
+        filtered = [
             f for f in all_candidates
             if re.search(rf'rutas[_\-]?0?{day_int}[_\-]', os.path.basename(f), re.I)
         ]
-        if potential:
-            print(f'[XLSX] Fallback filtrado por día {day_int}: {potential}', flush=True)
-        else:
-            # Último recurso: cualquier xlsx (con advertencia)
-            potential = all_candidates
-            print(f'[XLSX] ADVERTENCIA — Fallback total (puede ser día incorrecto): {potential}', flush=True)
+        if filtered:
+            print(f'[XLSX] Fallback filtrado por día {day_int}: {filtered[0]}', flush=True)
+            try:
+                with open(filtered[0], 'rb') as f:
+                    raw = f.read()
+                rutas = _parse_xlsx_bytes(raw, source_label=filtered[0])
+            except Exception as e:
+                print(f'[XLSX] Error en fallback filtrado: {e}', flush=True)
 
-    if not potential:
-        print('[XLSX] No se encontro ninguna planilla de rutas en BASE_DIR', flush=True)
+    if not rutas:
+        print(f'[XLSX] ADVERTENCIA: No se encontró xlsx para {fecha_str} en disco ni Postgres.', flush=True)
         return
 
-    fname = potential[0]
-    print(f'[XLSX] Cargando: {fname}', flush=True)
-
-    try:
-        wb = openpyxl.load_workbook(fname, data_only=True)
-        ws = wb.active
-        rutas = {}
-        processed = 0
-        print(f'[XLSX] Sheet activa: {ws.title}, max_row: {ws.max_row}', flush=True)
-
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            if not row or len(row) < 6: continue
-            vehiculo = str(row[1]).strip() if row[1] else None
-            bop      = str(row[5]).strip() if row[5] else None
-            if not vehiculo or not bop or len(bop) < 4:
-                continue
-            ruta = vehiculo
-            rutas.setdefault(ruta, [])
-            if bop not in rutas[ruta]:
-                rutas[ruta].append(bop)
-                processed += 1
-
-        with state_lock:
-            rutas_csv   = rutas
-            bop_to_ruta = {b: r for r, bops in rutas.items() for b in bops}
-        print(f'[XLSX] SUCCESS: {len(rutas)} rutas, {processed} BOPs cargados.', flush=True)
-    except Exception as e:
-        print(f'[XLSX] CRITICAL ERROR: {e}', flush=True)
+    with state_lock:
+        rutas_csv   = rutas
+        bop_to_ruta = {b: r for r, bops in rutas.items() for b in bops}
+    print(f'[XLSX] SUCCESS: {len(rutas_csv)} rutas, {sum(len(v) for v in rutas_csv.values())} BOPs cargados.', flush=True)
 
 # ── ASIGNACION DRIVER-RUTA DESDE IMAGEN DE ROBERTO ────────────────────────────
 def _descargar_media(media_id):
@@ -171,10 +215,21 @@ def procesar_imagen_asignacion(img_id):
         with open(dn_path, 'w', encoding='utf-8') as f:
             json.dump(driver_names, f, ensure_ascii=False, indent=2)
         print(f'[ASIG] Asignaciones cargadas: {new_names}', flush=True)
+        # Persistir en Postgres para sobrevivir reinicios de Render
+        try:
+            with state_lock:
+                fecha_hoy = today_str
+            database.save_driver_assignments(fecha_hoy, dict(driver_names))
+        except Exception as e2:
+            print(f'[ASIG] Error guardando assignments en Postgres: {e2}', flush=True)
     except Exception as e:
         print(f'[ASIG] Error procesando con Claude Vision: {e}', flush=True)
 
 def cargar_driver_names_desde_disco():
+    """
+    Carga driver names desde disco (driver_names.json).
+    Si el archivo no existe, intenta recuperar desde Postgres (driver_assignments).
+    """
     global driver_names
     dn_path = os.path.join(BASE_DIR, 'driver_names.json')
     if os.path.exists(dn_path):
@@ -182,8 +237,29 @@ def cargar_driver_names_desde_disco():
             with open(dn_path, encoding='utf-8') as f:
                 driver_names = json.load(f)
             print(f'[ASIG] Driver names cargados desde disco: {len(driver_names)} rutas', flush=True)
+            return  # disco OK, no necesitamos Postgres
         except Exception as e:
             print(f'[ASIG] Error leyendo driver_names.json: {e}', flush=True)
+
+    # Fallback Postgres
+    with state_lock:
+        fecha = today_str
+    try:
+        pg_names = database.load_driver_assignments(fecha)
+        if pg_names:
+            with state_lock:
+                driver_names = pg_names
+            # Restaurar en disco para futuros accesos
+            try:
+                with open(dn_path, 'w', encoding='utf-8') as f:
+                    json.dump(driver_names, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+            print(f'[ASIG] Driver names recuperados desde Postgres: {len(driver_names)} rutas', flush=True)
+        else:
+            print(f'[ASIG] Sin driver names en disco ni Postgres para {fecha}.', flush=True)
+    except Exception as e:
+        print(f'[ASIG] Error cargando driver names desde Postgres: {e}', flush=True)
 
 # ── DESCARGA AUTOMATICA DE XLSX DESDE CUALQUIER CHAT AUTORIZADO ────────────────
 def descargar_xlsx_doc(doc_id, filename):
@@ -198,6 +274,16 @@ def descargar_xlsx_doc(doc_id, filename):
         with open(out_path, 'wb') as f:
             f.write(data)
         print(f'[XLSX] Descargado: {out_name} ({len(data)} bytes) desde {filename}', flush=True)
+        # Persistir en Postgres para sobrevivir reinicios de Render
+        # Persistir en Postgres y poblar routes + route_stops
+        try:
+            from datetime import date as _date
+            y_str, m_str = mexico_now().strftime('%Y-%m').split('-')
+            fecha_xlsx = f'{y_str}-{m_str}-{day:02d}'
+            database.save_route_file(fecha_xlsx, out_name, data)
+            database.import_routes_from_xlsx(fecha_xlsx, data, out_name)
+        except Exception as e2:
+            print(f'[XLSX] Error guardando xlsx en Postgres: {e2}', flush=True)
         # Recargar inmediatamente las rutas del día actual si el archivo coincide
         hoy = mexico_now()
         if day == hoy.day:
@@ -710,6 +796,11 @@ def init_today():
 # ── FASTAPI APP ────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app):
+    # Crear tablas auxiliares en Postgres si no existen (xlsx_files, driver_assignments)
+    try:
+        database.ensure_tables()
+    except Exception as e:
+        print(f'[STARTUP] ensure_tables error (no crítico): {e}', flush=True)
     threading.Thread(target=init_today,          daemon=True).start()
     threading.Thread(target=_watcher_medianoche, daemon=True).start()
     yield
@@ -853,6 +944,12 @@ async def upload_xlsx_for_date(fecha: str, file: UploadFile = File(...)):
     with open(out_path, 'wb') as f:
         f.write(content)
     print(f'[XLSX] Upload manual: {out_name} ({len(content)} bytes)', flush=True)
+    # Guardar en Postgres y poblar routes + route_stops
+    try:
+        database.save_route_file(fecha, out_name, content)
+        database.import_routes_from_xlsx(fecha, content, out_name)
+    except Exception as e:
+        print(f'[XLSX] Error guardando upload en Postgres: {e}', flush=True)
 
     with state_lock:
         fecha_hoy = today_str
@@ -1007,8 +1104,19 @@ def _build_day_payload_from_db(fecha_str):
             print(f'[HIST] Error leyendo xlsx {fname_xlsx}: {e}')
 
     if not local_rutas:
+        # Intentar recuperar xlsx desde Postgres antes de ir a routes/route_stops
+        try:
+            pg_result = database.load_route_file_bytes(fecha_str)
+            if pg_result:
+                _, raw_bytes = pg_result
+                local_rutas = _parse_xlsx_bytes(raw_bytes, source_label=f'Postgres histórico {fecha_str}')
+                print(f'[HIST] {fecha_str}: rutas desde xlsx en Postgres — {sum(len(v) for v in local_rutas.values())} BOPs', flush=True)
+        except Exception as e:
+            print(f'[HIST] Error cargando xlsx desde Postgres: {e}', flush=True)
+
+    if not local_rutas:
         local_rutas, _ = database.load_routes_from_db(fecha_str)
-        print(f'[HIST] {fecha_str}: rutas cargadas desde DB — {len(local_rutas)} rutas', flush=True)
+        print(f'[HIST] {fecha_str}: rutas cargadas desde routes/route_stops DB — {len(local_rutas)} rutas', flush=True)
 
     local_bop_to_ruta = {b: r for r, bops in local_rutas.items() for b in bops}
 
