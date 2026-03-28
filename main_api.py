@@ -1322,6 +1322,78 @@ def api_history():
 
     return {'dias': dias}
 
+
+# ── ENDPOINT: Re-fetch completo de un día desde Whapi ────────────────────────
+@app.post('/api/refetch-day/{fecha}')
+def refetch_day(fecha: str):
+    """
+    Re-descarga TODOS los mensajes de Whapi para una fecha y los re-procesa.
+    Útil para recuperar mensajes que el webhook perdió (reinicios, videos, etc.)
+
+    Flujo:
+      1. Descarga todos los mensajes del día desde los 6 chats autorizados
+      2. Guarda los nuevos en raw_messages (ON CONFLICT los ignora)
+      3. Limpia el estado en RAM y recarga desde DB
+
+    Uso: POST /api/refetch-day/2026-03-26
+    """
+    if not re.match(r'^\d{4}-\d{2}-\d{2}$', fecha):
+        raise HTTPException(400, 'Formato de fecha inválido — usar YYYY-MM-DD')
+    if not TOKEN:
+        raise HTTPException(503, 'Sin WHAPI_TOKEN configurado')
+
+    with state_lock:
+        fecha_hoy = today_str
+
+    print(f'[REFETCH] Iniciando re-fetch de {fecha} desde Whapi...', flush=True)
+
+    # 1. Descargar mensajes desde Whapi
+    try:
+        msgs_whapi = _descargar_mensajes_whapi(fecha)
+    except Exception as e:
+        raise HTTPException(500, f'Error descargando desde Whapi: {e}')
+
+    print(f'[REFETCH] {len(msgs_whapi)} mensajes descargados de Whapi para {fecha}', flush=True)
+
+    # 2. Guardar en DB (save_raw_message ignora duplicados por whapi_message_id)
+    nuevos = 0
+    for msg in msgs_whapi:
+        try:
+            result = database.save_raw_message(msg)
+            if result:  # None = ya existia
+                nuevos += 1
+        except Exception as e:
+            print(f'[REFETCH] Error guardando mensaje: {e}', flush=True)
+
+    print(f'[REFETCH] {nuevos} mensajes nuevos guardados en DB', flush=True)
+
+    # 3. Si es el día actual: limpiar RAM y recargar
+    if fecha == fecha_hoy:
+        _reset_estado_dia()
+        load_xlsx(fecha)
+        cargar_driver_names_desde_disco()
+        msgs_db = []
+        try:
+            msgs_db = database.load_day_messages(fecha)
+        except Exception as e:
+            print(f'[REFETCH] Error cargando DB: {e}', flush=True)
+        for m in msgs_db:
+            procesar_mensaje(m)
+        kpis, total = regenerar_dashboard()
+        return {
+            'ok': True, 'fecha': fecha,
+            'msgs_whapi': len(msgs_whapi), 'msgs_nuevos_en_db': nuevos,
+            'recargado_en_vivo': True, 'bops': total, 'kpis': kpis,
+        }
+
+    # Para días históricos: el siguiente /api/history los reconstruirá
+    return {
+        'ok': True, 'fecha': fecha,
+        'msgs_whapi': len(msgs_whapi), 'msgs_nuevos_en_db': nuevos,
+        'recargado_en_vivo': False,
+        'siguiente_paso': f'Nuevos mensajes guardados. El histórico de {fecha} se reconstruye en /api/history.',
+    }
+
 @app.post('/webhook/whatsapp')
 async def webhook(request: Request):
     try:

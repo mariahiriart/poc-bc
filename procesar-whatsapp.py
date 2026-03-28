@@ -134,7 +134,7 @@ def fetch_messages(date_str):
         FROM raw_messages
         WHERE sent_at >= (%s::date + interval '6 hours')
           AND sent_at <  (%s::date + interval '1 day' + interval '6 hours')
-          AND whapi_type IN ('text', 'image', 'location')
+          AND whapi_type IN ('text', 'image', 'video', 'location')
         ORDER BY sent_at ASC
     """, (date_str, date_str))
     rows = cur.fetchall()
@@ -191,6 +191,17 @@ def procesar_dia(date_str):
             media_by_phone.setdefault(str(phone), []).append((sent_at, item))
             if not text:
                 continue
+        # Video con caption (fix: antes se ignoraban y el reporte se perdía)
+        elif wtype == 'video':
+            text = (raw.get('video') or {}).get('caption', '') or content or ''
+            if not text:
+                continue
+            item_vid = {
+                'type': 'video',
+                'id': (raw.get('video') or {}).get('id', ''),
+                'caption': text,
+            }
+            media_by_phone.setdefault(str(phone), []).append((sent_at, item_vid))
         elif wtype == 'text':
             text = (raw.get('text') or {}).get('body', '') or content or ''
             if not text:
