@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File
 from fastapi.responses import Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
@@ -69,14 +69,27 @@ def load_xlsx(fecha_str):
     parts = fecha_str.split('-')
     if len(parts) < 3: return
     d = parts[2]
-    
+
     patron = os.path.join(BASE_DIR, f'rutas_{d}_*.xlsx')
     print(f'[XLSX] Buscando patron: {patron}', flush=True)
     potential = glob.glob(patron)
+
     if not potential:
-        # Fallback total: cualquier rutas*.xlsx
-        potential = glob.glob(os.path.join(BASE_DIR, 'rutas*.xlsx'))
-        print(f'[XLSX] Fallback general: {potential}', flush=True)
+        # FIX: Fallback inteligente — solo aceptar xlsx que contengan el día correcto en el nombre.
+        # Evita cargar el xlsx de otro día (causa del bug de "IDs no encontrados").
+        day_int = int(d)
+        all_candidates = glob.glob(os.path.join(BASE_DIR, 'rutas*.xlsx'))
+        # Filtrar los que tengan el número de día correcto en el nombre
+        potential = [
+            f for f in all_candidates
+            if re.search(rf'rutas[_\-]?0?{day_int}[_\-]', os.path.basename(f), re.I)
+        ]
+        if potential:
+            print(f'[XLSX] Fallback filtrado por día {day_int}: {potential}', flush=True)
+        else:
+            # Último recurso: cualquier xlsx (con advertencia)
+            potential = all_candidates
+            print(f'[XLSX] ADVERTENCIA — Fallback total (puede ser día incorrecto): {potential}', flush=True)
 
     if not potential:
         print('[XLSX] No se encontro ninguna planilla de rutas en BASE_DIR', flush=True)
@@ -91,7 +104,7 @@ def load_xlsx(fecha_str):
         rutas = {}
         processed = 0
         print(f'[XLSX] Sheet activa: {ws.title}, max_row: {ws.max_row}', flush=True)
-        
+
         for row in ws.iter_rows(min_row=2, values_only=True):
             if not row or len(row) < 6: continue
             vehiculo = str(row[1]).strip() if row[1] else None
@@ -103,7 +116,7 @@ def load_xlsx(fecha_str):
             if bop not in rutas[ruta]:
                 rutas[ruta].append(bop)
                 processed += 1
-        
+
         with state_lock:
             rutas_csv   = rutas
             bop_to_ruta = {b: r for r, bops in rutas.items() for b in bops}
@@ -174,8 +187,9 @@ def cargar_driver_names_desde_disco():
 
 # ── DESCARGA AUTOMATICA DE XLSX DESDE CUALQUIER CHAT AUTORIZADO ────────────────
 def descargar_xlsx_doc(doc_id, filename):
-    # Intentamos extraer el día (ej: "26 MZO" o "26 de marzo")
-    m = re.search(r'(\d+)\s+(MZO|marzo)', filename, re.I)
+    # FIX: Regex corregido — soporta espacios, guiones bajos o sin separador.
+    # Antes: r'(\d+)\s+(MZO|marzo)' fallaba con nombres tipo "rutas_27_mzo.xlsx"
+    m = re.search(r'(\d+)[\s_]*(MZO|marzo)', filename, re.I)
     day = int(m.group(1)) if m else mexico_now().day
     out_name = f'rutas_{day:02d}_mzo.xlsx'
     out_path = os.path.join(BASE_DIR, out_name)
@@ -348,7 +362,7 @@ def _add_media_to_bop(bop, item):
             if any(m.get('id') == item['id'] for m in media_list): return
         elif item.get('type') == 'location':
             if any(m.get('type') == 'location' and m.get('lat') == item['lat'] and m.get('lon') == item['lon'] for m in media_list): return
-            
+
         media_list.append(item)
         if item['type'] == 'image':
             bop_reports[bop]['imgs'] = bop_reports[bop].get('imgs', 0) + 1
@@ -360,7 +374,7 @@ def _buffer_media_and_assign(phone, item, target_bops, ts):
         queue.append({'ts': ts, 'item': item})
         # Limpiar
         pending_media_by_phone[phone] = [x for x in queue if ts - x['ts'] < 600]
-        
+
         if target_bops:
             for bop in target_bops:
                 _add_media_to_bop(bop, item)
@@ -414,7 +428,7 @@ def procesar_mensaje(msg):
         caption_bops = extract_bop(caption) if caption else []
         with state_lock:
             target_bops = caption_bops if caption_bops else last_bops_by_phone.get(phone, [])
-        
+
         # Fallback DB si no hay contexto en memoria
         if not target_bops:
             try:
@@ -426,9 +440,9 @@ def procesar_mensaje(msg):
 
         if target_bops:
             pass # Solo para logica; la asignacion real se hace abajo con _buffer_media
-            
+
         _buffer_media_and_assign(phone, item, target_bops, ts)
-        
+
         if not caption:
             return None
         text = caption
@@ -456,9 +470,9 @@ def procesar_mensaje(msg):
 
         if target_bops:
             pass
-            
+
         _buffer_media_and_assign(phone, item, target_bops, ts)
-        
+
         if not caption:
             return None
         text = caption
@@ -466,7 +480,7 @@ def procesar_mensaje(msg):
         text = (msg.get('text') or {}).get('body', '')
         if not text:
             return None
-        
+
         # Buscar links de Google Maps en el texto
         maps_match = re.search(r'https?://(?:maps\.google\.com|goo\.gl/maps|maps\.app\.goo\.gl)/[^\s]+', text)
         if maps_match:
@@ -528,10 +542,10 @@ def procesar_mensaje(msg):
                     bop_reports[bop]['hora']   = hora
                 bop_reports[bop]['msgs'].append(f'{hora} {nombre}: {text[:100]}')
             last_bops_by_phone[phone] = list(all_bops_msg)
-        
+
         # Rescate de media enviada ANTES del texto!
         _retro_assign_buffered_media(phone, all_bops_msg, ts)
-        
+
         print(f'[RT] DRV BOPs={all_bops_msg} status={r["status"]}', flush=True)
         return {'type': 'driver', 'bops': all_bops_msg, 'parsed': r, 'nombre': nombre}
     return None
@@ -612,15 +626,15 @@ def rescatar_archivos_contexto(fecha_str):
     MEXICO_OFFSET_S = 6 * 3600
 
     headers = {'Authorization': f'Bearer {TOKEN}', 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0'}
-    
-    # 1. Rescatar XLSX (Ayer 18:00 a 23:59)
+
+    # 1. Rescatar XLSX (Ayer 18:00 a 23:59 hora Mexico)
     target_fname = f'rutas_{d:02d}_mzo.xlsx'
     if not os.path.exists(os.path.join(BASE_DIR, target_fname)):
-        dt_ayer_18 = dt_hoy - dt_lib.timedelta(hours=6)  # Ayer 18:00
+        dt_ayer_18 = dt_hoy - dt_lib.timedelta(hours=6)   # Ayer 18:00 UTC → 18:00 Mexico
         dt_ayer_23 = dt_hoy - dt_lib.timedelta(seconds=1) # Ayer 23:59:59
         ts_inicio = int(dt_ayer_18.timestamp()) + MEXICO_OFFSET_S
         ts_fin    = int(dt_ayer_23.timestamp()) + MEXICO_OFFSET_S
-        
+
         try:
             url = f'https://gate.whapi.cloud/messages/list/{XLSX_CHAT_ID}?count=100'
             req = urllib.request.Request(url, headers=headers)
@@ -638,11 +652,13 @@ def rescatar_archivos_contexto(fecha_str):
         except Exception as e:
             print(f'[INIT] Error rescatando XLSX: {e}')
 
-    # 2. Rescatar Imagen Asignacion (Hoy 06:00 a 08:59)
-    dt_hoy_06 = dt_hoy + dt_lib.timedelta(hours=6) # 06:00
-    dt_hoy_09 = dt_hoy + dt_lib.timedelta(hours=9) # 09:00 (hasta las 08:59:59)
-    ts_inicio_img = int(dt_hoy_06.timestamp()) + MEXICO_OFFSET_S
-    ts_fin_img    = int(dt_hoy_09.timestamp()) + MEXICO_OFFSET_S
+    # FIX: Ventana de imagen de asignación ampliada.
+    # Antes: solo 06:00-08:59 de hoy → Roberto manda a las 2:33 AM y no se capturaba.
+    # Ahora: desde 20:00 de ayer hasta 09:00 de hoy (cubre madrugadas y cambios de turno).
+    dt_inicio_img = dt_hoy - dt_lib.timedelta(hours=4)  # 20:00 hora Mexico de ayer
+    dt_fin_img    = dt_hoy + dt_lib.timedelta(hours=9)  # 09:00 hora Mexico de hoy
+    ts_inicio_img = int(dt_inicio_img.timestamp()) + MEXICO_OFFSET_S
+    ts_fin_img    = int(dt_fin_img.timestamp()) + MEXICO_OFFSET_S
 
     try:
         url = f'https://gate.whapi.cloud/messages/list/{XLSX_CHAT_ID}?count=100'
@@ -654,7 +670,7 @@ def rescatar_archivos_contexto(fecha_str):
             if ts_inicio_img <= ts_m <= ts_fin_img and m.get('type') == 'image' and m.get('from') == ROBERTO_PHONE:
                 img_id = (m.get('image') or {}).get('id', '')
                 if img_id:
-                    print(f'[INIT] Rescatando imagen asignacion de Roberto de esta mañana: {img_id}', flush=True)
+                    print(f'[INIT] Rescatando imagen asignacion de Roberto (ventana ampliada): {img_id}', flush=True)
                     threading.Thread(target=procesar_imagen_asignacion, args=(img_id,), daemon=True).start()
                     break
     except Exception as e:
@@ -667,7 +683,7 @@ def init_today():
         today_str = fecha
     print(f'[API] Inicializando dia {fecha}...', flush=True)
 
-    # Rescatar archivos de contexto (Excel e Imagen) en sus ventanas de tiempo estrictas
+    # Rescatar archivos de contexto (Excel e Imagen) en sus ventanas de tiempo
     if TOKEN:
         rescatar_archivos_contexto(fecha)
 
@@ -685,7 +701,6 @@ def init_today():
         print(f'[API] BD vacia — descargando desde Whapi...', flush=True)
         msgs_hoy = _descargar_mensajes_whapi(fecha)
 
-    # Ahora procesar el resto de mensajes, que estrictamente son los de hoy 00:00 en adelante
     for m in msgs_hoy:
         procesar_mensaje(m)
 
@@ -739,7 +754,7 @@ def health():
     with state_lock:
         total    = len(bop_reports) + len(set(bo_responses) - set(bop_reports))
         exitosos = sum(1 for r in bop_reports.values() if is_exitoso(r['status']))
-    return {'status': 'online', 'version': '3.0', 'fecha': today_str,
+    return {'status': 'online', 'version': '3.1', 'fecha': today_str,
             'bops_vivos': total, 'exitosos': exitosos}
 
 @app.get('/media/{media_id:path}')
@@ -776,7 +791,6 @@ def reload_routes():
 
 @app.get('/api/debug-files')
 def debug_files():
-    import os
     return {
         'cwd': os.getcwd(),
         'base_dir': BASE_DIR,
@@ -790,23 +804,6 @@ def api_backfill():
     backfill_today.backfill_today()
     init_today()
     return {'ok': True}
-
-@app.get("/api/debug-extra-bops")
-async def debug_extra_bops():
-    from datetime import date
-    date_str = str(date.today())
-    # Bops en assigned desde stats
-    ids_in_stats = set(assigned_packages.keys())
-    # Bops en excel
-    rutas, bops_xlsx = descargar_xlsx_doc(date_str)
-    excel_ids = set(bops_xlsx.keys())
-    
-    extra = ids_in_stats - excel_ids
-    return {
-        "total_in_stats": len(ids_in_stats), 
-        "total_in_excel": len(excel_ids), 
-        "extra_ids": list(extra)
-    }
 
 @app.post('/api/reload-messages')
 def reload_messages():
@@ -831,6 +828,69 @@ def api_data():
     """Fuente de verdad del dashboard — solo hoy (en vivo)."""
     return _build_dashboard_payload()
 
+# ── NUEVO ENDPOINT: Subida manual de xlsx para cualquier fecha ─────────────────
+@app.post('/api/upload-xlsx/{fecha}')
+async def upload_xlsx_for_date(fecha: str, file: UploadFile = File(...)):
+    """
+    Sube manualmente el xlsx de rutas para una fecha dada (YYYY-MM-DD).
+    Corrige el estado del dashboard si el xlsx se guardó con nombre incorrecto.
+
+    Uso (bash):
+        curl -X POST https://poc-bc.onrender.com/api/upload-xlsx/2026-03-27 \\
+             -F "file=@rutas_27_mzo.xlsx"
+
+        curl -X POST https://poc-bc.onrender.com/api/upload-xlsx/2026-03-28 \\
+             -F "file=@Rutas_para_28_Mzo_Telcel_Movistar_2025_JCR.xlsx"
+    """
+    if not re.match(r'^\d{4}-\d{2}-\d{2}$', fecha):
+        raise HTTPException(400, 'Formato de fecha inválido — usar YYYY-MM-DD')
+
+    day      = int(fecha.split('-')[2])
+    out_name = f'rutas_{day:02d}_mzo.xlsx'
+    out_path = os.path.join(BASE_DIR, out_name)
+
+    content = await file.read()
+    with open(out_path, 'wb') as f:
+        f.write(content)
+    print(f'[XLSX] Upload manual: {out_name} ({len(content)} bytes)', flush=True)
+
+    with state_lock:
+        fecha_hoy = today_str
+
+    if fecha == fecha_hoy:
+        # Es el día actual: recargar estado en vivo
+        load_xlsx(fecha)
+        with state_lock:
+            rc = len(rutas_csv)
+            bc = sum(len(v) for v in rutas_csv.values())
+        return {
+            'ok': True, 'archivo': out_name,
+            'rutas': rc, 'bops': bc,
+            'recargado_en_vivo': True,
+            'siguiente_paso': 'Dashboard actualizado. Recargá la página.'
+        }
+
+    return {
+        'ok': True, 'archivo': out_name,
+        'recargado_en_vivo': False,
+        'siguiente_paso': f'Archivo guardado. El histórico del {fecha} se reconstruye automáticamente desde /api/history.'
+    }
+
+# ── NUEVO ENDPOINT: Forzar rescate de imagen de asignación ────────────────────
+@app.post('/api/rescatar-asignacion')
+def rescatar_asignacion():
+    """
+    Vuelve a buscar y procesar la imagen de asignación de Roberto
+    en la ventana ampliada (20:00 ayer - 09:00 hoy).
+    Útil cuando la imagen se mandó de madrugada y no fue capturada al inicio.
+    """
+    if not TOKEN:
+        raise HTTPException(503, 'Sin WHAPI token configurado')
+    with state_lock:
+        fecha = today_str
+    threading.Thread(target=rescatar_archivos_contexto, args=(fecha,), daemon=True).start()
+    return {'ok': True, 'msg': f'Rescate iniciado para {fecha}. Revisá los logs y recargá /api/reload-names en ~15s.'}
+
 
 @app.get('/api/thread/{bop_id}')
 def api_thread(bop_id: str, fecha: str = None):
@@ -851,19 +911,18 @@ def api_thread(bop_id: str, fecha: str = None):
 
     try:
         thread = database.load_bop_thread(bop_id, fecha_local)
-        
+
         # INYECCIÓN DE MEDIA HUÉRFANA DESDE LA MEMORIA
         with state_lock:
             mem_media = (bop_reports.get(bop_id) or {}).get('media', [])
-            
-        thread_ids = {t.get('id') for t in thread if t.get('id')}
+
+        thread_ids  = {t.get('id') for t in thread if t.get('id')}
         thread_locs = {f"{t['location']['lat']}_{t['location']['lon']}" for t in thread if t.get('location')}
 
         for m in mem_media:
-            # Evitar duplicados con los q ya extrajo el DB
             if m.get('id') and m['id'] in thread_ids: continue
             if m.get('type') == 'location' and f"{m.get('lat')}_{m.get('lon')}" in thread_locs: continue
-            
+
             dummy_item = {
                 'id': m.get('id', ''),
                 'sender_name': 'Driver (Evidencia)',
@@ -883,7 +942,7 @@ def api_thread(bop_id: str, fecha: str = None):
                 }
             else:
                 dummy_item['media'] = m
-            
+
             thread.append(dummy_item)
 
         def get_hora(t):
@@ -912,27 +971,45 @@ def _build_day_payload_from_db(fecha_str):
     mensajes desde PostgreSQL. No toca el estado global en absoluto.
     Usa _build_payload_from_state() — misma lógica que el día en vivo.
     """
-    # 1. Rutas: primero xlsx del dia, luego DB
-    day        = fecha_str.split('-')[2]
-    fname_xlsx = os.path.join(BASE_DIR, f'rutas_{day}_mzo.xlsx')
+    # 1. Rutas: primero xlsx del dia (con nombre exacto o con padding), luego DB
+    day        = fecha_str.split('-')[2]          # '27' (sin padding)
+    day_padded = f'{int(day):02d}'                # '27' (ya tiene 2 dígitos)
+
+    # Buscar el xlsx con ambas variantes de nombre
+    fname_xlsx = None
+    for candidate in [
+        os.path.join(BASE_DIR, f'rutas_{day}_mzo.xlsx'),
+        os.path.join(BASE_DIR, f'rutas_{day_padded}_mzo.xlsx'),
+    ]:
+        if os.path.exists(candidate):
+            fname_xlsx = candidate
+            break
+
     local_rutas = {}
-    if os.path.exists(fname_xlsx):
+    if fname_xlsx:
         try:
-            wb = openpyxl.load_workbook(fname_xlsx)
+            # FIX: data_only=True para obtener valores calculados, no fórmulas
+            wb = openpyxl.load_workbook(fname_xlsx, data_only=True)
             ws = wb.active
             for row in ws.iter_rows(min_row=2, values_only=True):
-                vehiculo = row[1]
-                bop = str(row[5]).strip() if row[5] else None
-                if not vehiculo or not bop or len(bop) != 7:
+                # FIX: str() en vehiculo para evitar crash si la celda es numérica
+                vehiculo = str(row[1]).strip() if row[1] is not None else None
+                bop      = str(row[5]).strip() if row[5] is not None else None
+                # FIX: mismo criterio que load_xlsx (len < 4) en lugar de != 7
+                if not vehiculo or not bop or len(bop) < 4:
                     continue
-                ruta = vehiculo.strip()
+                ruta = vehiculo
                 local_rutas.setdefault(ruta, [])
                 if bop not in local_rutas[ruta]:
                     local_rutas[ruta].append(bop)
+            print(f'[HIST] {fecha_str}: xlsx cargado desde {fname_xlsx} — {sum(len(v) for v in local_rutas.values())} BOPs', flush=True)
         except Exception as e:
             print(f'[HIST] Error leyendo xlsx {fname_xlsx}: {e}')
+
     if not local_rutas:
         local_rutas, _ = database.load_routes_from_db(fecha_str)
+        print(f'[HIST] {fecha_str}: rutas cargadas desde DB — {len(local_rutas)} rutas', flush=True)
+
     local_bop_to_ruta = {b: r for r, bops in local_rutas.items() for b in bops}
 
     # 2. Driver names del dia
@@ -998,6 +1075,22 @@ def _build_day_payload_from_db(fecha_str):
             if not caption:
                 continue
             text = caption
+
+        # FIX: Soporte de videos en reconstrucción histórica (antes eran ignorados)
+        elif mtype == 'video':
+            vid     = msg.get('video') or {}
+            caption = vid.get('caption', '') or ''
+            item = {
+                'type': 'video', 'preview': vid.get('preview', ''),
+                'id': vid.get('id', ''), 'caption': caption,
+            }
+            target_bops = extract_bop(caption) if caption else local_last_bops_by_phone.get(phone, [])
+            for bop in target_bops:
+                _local_add_media(bop, item)
+            if not caption:
+                continue
+            text = caption
+
         elif mtype == 'text':
             text = (msg.get('text') or {}).get('body', '')
             if not text:
