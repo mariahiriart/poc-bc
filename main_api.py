@@ -716,7 +716,8 @@ def rescatar_archivos_contexto(fecha_str):
     # 1. Rescatar XLSX (Ayer 18:00 a 23:59 hora Mexico)
     target_fname = f'rutas_{d:02d}_mzo.xlsx'
     if not os.path.exists(os.path.join(BASE_DIR, target_fname)):
-        dt_ayer_18 = dt_hoy - dt_lib.timedelta(hours=6)   # Ayer 18:00 UTC → 18:00 Mexico
+        # DESPUÉS — busca desde hace 3 días a las 16:00 (cubre sábado → lunes)
+        dt_ayer_18 = dt_hoy - dt_lib.timedelta(hours=32)  # 3 días atrás 16:00 cubre sábado
         dt_ayer_23 = dt_hoy - dt_lib.timedelta(seconds=1) # Ayer 23:59:59
         ts_inicio = int(dt_ayer_18.timestamp()) + MEXICO_OFFSET_S
         ts_fin    = int(dt_ayer_23.timestamp()) + MEXICO_OFFSET_S
