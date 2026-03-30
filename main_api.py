@@ -739,11 +739,10 @@ def rescatar_archivos_contexto(fecha_str):
         except Exception as e:
             print(f'[INIT] Error rescatando XLSX: {e}')
 
-    # FIX: Ventana de imagen de asignación ampliada.
-    # Antes: solo 06:00-08:59 de hoy → Roberto manda a las 2:33 AM y no se capturaba.
-    # Ahora: desde 20:00 de ayer hasta 09:00 de hoy (cubre madrugadas y cambios de turno).
-    dt_inicio_img = dt_hoy - dt_lib.timedelta(hours=4)  # 20:00 hora Mexico de ayer
-    dt_fin_img    = dt_hoy + dt_lib.timedelta(hours=9)  # 09:00 hora Mexico de hoy
+    # Ventana de imagen de asignación: desde 20:00 de ayer hasta medianoche de hoy.
+    # Cubre madrugadas, reinicios tardíos de Render y cualquier hora del día.
+    dt_inicio_img = dt_hoy - dt_lib.timedelta(hours=4)   # 20:00 hora Mexico de ayer
+    dt_fin_img    = dt_hoy + dt_lib.timedelta(hours=24)  # Medianoche de hoy (día completo)
     ts_inicio_img = int(dt_inicio_img.timestamp()) + MEXICO_OFFSET_S
     ts_fin_img    = int(dt_fin_img.timestamp()) + MEXICO_OFFSET_S
 
@@ -864,6 +863,13 @@ def proxy_media(media_id: str):
                         headers={'Cache-Control': 'public, max-age=86400'})
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+@app.get('/api/asignacion-imagen')
+def get_asignacion_imagen():
+    img_path = os.path.join(BASE_DIR, 'asignacion_hoy.jpg')
+    if not os.path.exists(img_path):
+        raise HTTPException(status_code=404, detail='No hay imagen de asignación para hoy')
+    return FileResponse(img_path, media_type='image/jpeg', headers={'Cache-Control': 'no-cache'})
 
 @app.get('/status')
 def get_status():

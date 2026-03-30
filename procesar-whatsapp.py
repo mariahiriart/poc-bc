@@ -12,7 +12,7 @@ NOTA: Este script comparte toda la lógica de parseo con main_api.py
       a través del módulo bop_parser.py. Cualquier cambio en las reglas
       de parseo solo se hace en bop_parser.py.
 """
-import json, sys, os, shutil
+import json, sys, os, shutil, glob as _glob, re as _re
 import openpyxl
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -41,15 +41,6 @@ DB_CFG = dict(
 )
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-XLSX_MAP = {
-    '2026-03-18': 'rutas_18_mzo.xlsx',
-    '2026-03-19': 'rutas_19_mzo.xlsx',
-    '2026-03-20': 'rutas_20_mzo.xlsx',
-    '2026-03-21': 'rutas_21_mzo.xlsx',
-    '2026-03-23': 'rutas_23_mzo.xlsx',
-    '2026-03-24': 'rutas_24_mzo.xlsx',
-}
 
 
 # ── CARGAR RUTAS ───────────────────────────────────────────────────────────────
@@ -83,25 +74,38 @@ def load_rutas_from_db(date_str):
 
 
 def load_rutas_from_xlsx(date_str):
-    fname = XLSX_MAP.get(date_str)
-    if not fname:
+    """Busca el xlsx por glob (mismo enfoque que main_api.py)."""
+    day = int(date_str.split('-')[2])
+    # Buscar con patrón numérico exacto del día (e.g. rutas_30_mzo.xlsx, rutas_30_*.xlsx)
+    candidates = _glob.glob(os.path.join(BASE_DIR, f'rutas_{day:02d}_*.xlsx'))
+    if not candidates:
+        candidates = _glob.glob(os.path.join(BASE_DIR, f'rutas_{day}_*.xlsx'))
+    # Fallback: cualquier xlsx cuyo nombre contenga el número del día
+    if not candidates:
+        for f in _glob.glob(os.path.join(BASE_DIR, 'rutas*.xlsx')):
+            if _re.search(rf'rutas[_\-]?0?{day}[_\-]', os.path.basename(f), _re.I):
+                candidates.append(f)
+    if not candidates:
         return {}, {}
-    path = os.path.join(BASE_DIR, fname)
-    if not os.path.exists(path):
+    path = candidates[0]
+    try:
+        wb = openpyxl.load_workbook(path, data_only=True)
+    except Exception as e:
+        print(f'  [XLSX] Error leyendo {path}: {e}')
         return {}, {}
-    wb = openpyxl.load_workbook(path)
     ws = wb.active
     rutas = {}
     for row in ws.iter_rows(min_row=2, values_only=True):
-        vehiculo = row[1]
-        bop      = str(row[5]).strip() if row[5] else None
-        if not vehiculo or not bop or len(bop) != 7:
+        vehiculo = str(row[1]).strip() if row[1] is not None else None
+        bop      = str(row[5]).strip() if row[5] is not None else None
+        if not vehiculo or not bop or len(bop) < 4:
             continue
-        ruta = vehiculo.strip()
+        ruta = vehiculo
         rutas.setdefault(ruta, [])
         if bop not in rutas[ruta]:
             rutas[ruta].append(bop)
     bop_to_ruta = {b: r for r, bops in rutas.items() for b in bops}
+    print(f'  [XLSX] Cargado desde {os.path.basename(path)}: {len(rutas)} rutas')
     return rutas, bop_to_ruta
 
 
