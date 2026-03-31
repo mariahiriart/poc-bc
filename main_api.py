@@ -713,14 +713,14 @@ def rescatar_archivos_contexto(fecha_str):
 
     headers = {'Authorization': f'Bearer {TOKEN}', 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0'}
 
-    # 1. Rescatar XLSX (Ayer 18:00 a 23:59 hora Mexico)
+    # 1. Rescatar XLSX (Ventana: 3 días atrás 16:00 hasta fin del día de hoy)
+    # Cubre: xlsx enviado la noche anterior O el mismo día por la mañana
     target_fname = f'rutas_{d:02d}_mzo.xlsx'
     if not os.path.exists(os.path.join(BASE_DIR, target_fname)):
-        # DESPUÉS — busca desde hace 3 días a las 16:00 (cubre sábado → lunes)
         dt_ayer_18 = dt_hoy - dt_lib.timedelta(hours=32)  # 3 días atrás 16:00 cubre sábado
-        dt_ayer_23 = dt_hoy - dt_lib.timedelta(seconds=1) # Ayer 23:59:59
+        dt_fin_xlsx = dt_hoy + dt_lib.timedelta(hours=24) # Fin del día de hoy (cubre mañana)
         ts_inicio = int(dt_ayer_18.timestamp()) + MEXICO_OFFSET_S
-        ts_fin    = int(dt_ayer_23.timestamp()) + MEXICO_OFFSET_S
+        ts_fin    = int(dt_fin_xlsx.timestamp()) + MEXICO_OFFSET_S
 
         try:
             url = f'https://gate.whapi.cloud/messages/list/{XLSX_CHAT_ID}?count=100'
@@ -866,10 +866,11 @@ def proxy_media(media_id: str):
 
 @app.get('/api/asignacion-imagen')
 def get_asignacion_imagen():
-    img_path = os.path.join(BASE_DIR, 'asignacion_hoy.jpg')
-    if not os.path.exists(img_path):
-        raise HTTPException(status_code=404, detail='No hay imagen de asignación para hoy')
-    return FileResponse(img_path, media_type='image/jpeg', headers={'Cache-Control': 'no-cache'})
+    for candidate in ['asignacion_hoy.jpg', 'asignacion_roberto.jpg']:
+        img_path = os.path.join(BASE_DIR, candidate)
+        if os.path.exists(img_path):
+            return FileResponse(img_path, media_type='image/jpeg', headers={'Cache-Control': 'no-cache'})
+    raise HTTPException(status_code=404, detail='No hay imagen de asignación para hoy')
 
 @app.get('/status')
 def get_status():

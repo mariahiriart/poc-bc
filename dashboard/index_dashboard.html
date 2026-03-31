@@ -2338,7 +2338,9 @@
             return rows;
         }
 
-        function renderRutas() { rutasPage = 1; renderRutasPage(getRutasData()); }
+        function renderRutas() {
+            rutasPage = 1; renderRutasPage(getRutasData());
+        }
         window.goToRutasPage = function(n) { rutasPage = n; renderRutasPage(getRutasData()); };
 
         function renderRutasPage(rows) {
