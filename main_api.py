@@ -8,6 +8,7 @@ import openpyxl
 from dotenv import load_dotenv
 load_dotenv()
 import database
+from typo_corrector import corregir_lista_bops
 
 # Importar lógica de parseo desde módulo compartido
 from bop_parser import (
@@ -45,6 +46,7 @@ bo_responses       = {}
 last_bops_by_phone = {}
 rutas_csv          = {}
 bop_to_ruta        = {}
+bop_por_ruta_punto = {}  # {ruta_num: {punto_int: bop}} — para corrector typos
 driver_names       = {}
 pending_media_by_phone = {} # buffer de evidencia reciente
 
@@ -91,6 +93,36 @@ def _parse_xlsx_bytes(raw_bytes, source_label=''):
     return rutas
 
 
+def _build_ruta_punto_index(raw_bytes):
+    """
+    Construye {ruta_num: {punto_int: bop}} desde bytes de xlsx.
+    Usado por el typo_corrector para la Regla 1 (ruta + punto exactos).
+    row[1]=vehiculo, row[2]=parada(punto), row[5]=bop
+    """
+    import io, re as _re
+    index = {}
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(raw_bytes), data_only=True)
+        ws = wb.active
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if not row or len(row) < 6: continue
+            vehiculo = str(row[1]).strip() if row[1] is not None else None
+            punto    = row[2]
+            bop      = str(row[5]).strip() if row[5] is not None else None
+            if not vehiculo or punto is None or not bop or len(bop) < 4:
+                continue
+            m = _re.search(r'\d+', vehiculo)
+            ruta_num = m.group(0) if m else vehiculo
+            try:
+                punto_int = int(punto)
+            except (ValueError, TypeError):
+                continue
+            index.setdefault(ruta_num, {})[punto_int] = bop
+    except Exception as e:
+        print(f'[XLSX] Error construyendo indice ruta+punto: {e}', flush=True)
+    return index
+
+
 def load_xlsx(fecha_str):
     """
     Carga el xlsx de rutas para la fecha dada.
@@ -124,6 +156,7 @@ def load_xlsx(fecha_str):
             with open(fname, 'rb') as f:
                 raw = f.read()
             rutas = _parse_xlsx_bytes(raw, source_label=fname)
+            _last_raw = raw
         except Exception as e:
             print(f'[XLSX] Error leyendo disco {fname}: {e}', flush=True)
 
@@ -142,6 +175,7 @@ def load_xlsx(fecha_str):
             except Exception as e:
                 print(f'[XLSX] No se pudo escribir disco (continuamos desde memoria): {e}', flush=True)
             rutas = _parse_xlsx_bytes(raw_bytes, source_label=f'Postgres:{filename}')
+            _last_raw = raw_bytes
 
     # 3. Último recurso: cualquier xlsx del día correcto en disco (evita día incorrecto)
     if not rutas:
@@ -156,6 +190,7 @@ def load_xlsx(fecha_str):
                 with open(filtered[0], 'rb') as f:
                     raw = f.read()
                 rutas = _parse_xlsx_bytes(raw, source_label=filtered[0])
+                _last_raw = raw
             except Exception as e:
                 print(f'[XLSX] Error en fallback filtrado: {e}', flush=True)
 
@@ -163,9 +198,14 @@ def load_xlsx(fecha_str):
         print(f'[XLSX] ADVERTENCIA: No se encontró xlsx para {fecha_str} en disco ni Postgres.', flush=True)
         return
 
+    # Construir indice ruta+punto para el typo corrector
+    # _last_raw se captura dentro del bloque que cargó las rutas exitosamente
+    _ruta_punto_idx = _build_ruta_punto_index(_last_raw) if '_last_raw' in dir() and _last_raw else {}
+
     with state_lock:
-        rutas_csv   = rutas
-        bop_to_ruta = {b: r for r, bops in rutas.items() for b in bops}
+        rutas_csv          = rutas
+        bop_to_ruta        = {b: r for r, bops in rutas.items() for b in bops}
+        bop_por_ruta_punto = _ruta_punto_idx
     print(f'[XLSX] SUCCESS: {len(rutas_csv)} rutas, {sum(len(v) for v in rutas_csv.values())} BOPs cargados.', flush=True)
 
 # ── ASIGNACION DRIVER-RUTA DESDE IMAGEN DE ROBERTO ────────────────────────────
@@ -613,6 +653,24 @@ def procesar_mensaje(msg):
     r = parse_driver(text)
     if r:
         all_bops_msg = r['bops']
+
+        # ── TYPO CORRECTOR: corregir BOPs mal escritos antes de procesar ──────
+        with state_lock:
+            _rutas_snap = dict(rutas_csv)
+            _b2r_snap   = dict(bop_to_ruta)
+            _brp_snap   = dict(bop_por_ruta_punto)
+        all_bops_msg, _correcciones = corregir_lista_bops(
+            all_bops_msg, r.get('ruta'), r.get('punto'),
+            _rutas_snap, _b2r_snap, _brp_snap,
+        )
+        for _c in _correcciones:
+            print(
+                f'[TYPO] Auto-corrección: {_c["bop_original"]} → {_c["bop_corregido"]} '
+                f'(ruta={_c["ruta_real"]}, dist={_c["distancia"]}, conf={_c["confianza"]})',
+                flush=True
+            )
+        # ─────────────────────────────────────────────────────────────────────
+
         with state_lock:
             for bop in all_bops_msg:
                 ruta_real = bop_to_ruta.get(bop) or r['ruta'] or '?'
@@ -638,13 +696,14 @@ def procesar_mensaje(msg):
 
 # ── ROLLOVER DE MEDIANOCHE ─────────────────────────────────────────────────────
 def _reset_estado_dia():
-    global bop_reports, bo_responses, last_bops_by_phone, rutas_csv, bop_to_ruta, pending_media_by_phone
+    global bop_reports, bo_responses, last_bops_by_phone, rutas_csv, bop_to_ruta, bop_por_ruta_punto, pending_media_by_phone
     with state_lock:
         bop_reports        = {}
         bo_responses       = {}
         last_bops_by_phone = {}
         rutas_csv          = {}
         bop_to_ruta        = {}
+        bop_por_ruta_punto = {}
         pending_media_by_phone = {}
     print('[ROLLOVER] Estado en memoria limpiado.', flush=True)
 
@@ -845,7 +904,7 @@ def health():
     with state_lock:
         total    = len(bop_reports) + len(set(bo_responses) - set(bop_reports))
         exitosos = sum(1 for r in bop_reports.values() if is_exitoso(r['status']))
-    return {'status': 'online', 'version': '3.1', 'fecha': today_str,
+    return {'status': 'online', 'version': '3.2', 'fecha': today_str,
             'bops_vivos': total, 'exitosos': exitosos}
 
 @app.get('/media/{media_id:path}')
@@ -1234,7 +1293,24 @@ def _build_day_payload_from_db(fecha_str):
             continue
         r = parse_driver(text)
         if r:
-            for bop in r['bops']:
+            # ── TYPO CORRECTOR: corrección en reconstrucción histórica ────────
+            # Construir indice punto para este dia historico si no existe
+            if not hasattr(_build_day_payload_from_db, '_brp_cache'):
+                _build_day_payload_from_db._brp_cache = {}
+            _brp_local = _build_day_payload_from_db._brp_cache.get(fecha_str, {})
+
+            _bops_hist, _corr_hist = corregir_lista_bops(
+                r['bops'], r.get('ruta'), r.get('punto'),
+                local_rutas, local_bop_to_ruta, _brp_local,
+            )
+            for _c in _corr_hist:
+                print(
+                    f'[TYPO-HIST] {_c["bop_original"]} → {_c["bop_corregido"]} '
+                    f'(ruta={_c["ruta_real"]}, dist={_c["distancia"]})',
+                    flush=True
+                )
+            # ─────────────────────────────────────────────────────────────────
+            for bop in _bops_hist:
                 ruta_real = local_bop_to_ruta.get(bop) or r['ruta'] or '?'
                 if bop not in local_bop_reports:
                     local_bop_reports[bop] = {
@@ -1247,7 +1323,7 @@ def _build_day_payload_from_db(fecha_str):
                     local_bop_reports[bop]['obs']    = r['obs']
                     local_bop_reports[bop]['hora']   = hora
                 local_bop_reports[bop]['msgs'].append(f'{hora} {nombre}: {text[:100]}')
-            local_last_bops_by_phone[phone] = list(r['bops'])
+            local_last_bops_by_phone[phone] = list(_bops_hist)
 
     # 5. Construir con el helper compartido
     return _build_payload_from_state(
@@ -1378,7 +1454,7 @@ def refetch_day(fecha: str):
     # 3. Si es el día actual: limpiar RAM y recargar
     if fecha == fecha_hoy:
         _reset_estado_dia()
-        load_xlsx(fecha)
+        load_xlsx(fecha)s
         cargar_driver_names_desde_disco()
         msgs_db = []
         try:
@@ -1491,3 +1567,4 @@ def _procesar_y_actualizar(msg):
 
 if __name__ == '__main__':
     uvicorn.run(app, host='0.0.0.0', port=8000)
+   
