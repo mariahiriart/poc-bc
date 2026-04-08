@@ -1454,7 +1454,7 @@ def refetch_day(fecha: str):
     # 3. Si es el día actual: limpiar RAM y recargar
     if fecha == fecha_hoy:
         _reset_estado_dia()
-        load_xlsx(fecha)s
+        load_xlsx(fecha)
         cargar_driver_names_desde_disco()
         msgs_db = []
         try:
